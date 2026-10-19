@@ -4735,6 +4735,136 @@ EXP.load(); setTimeout(()=>{ expBar(); if(/[?&#]expert\b/.test(location.search+l
  #expCard{margin-bottom:12px;display:grid;gap:10px}
  .exp-tbl{font-size:12.5px}.exp-tbl td,.exp-tbl th{padding:6px 8px;vertical-align:top}
  .tbl-wrap{overflow-x:auto}.exp-tbl{width:100%;border-collapse:collapse}.exp-tbl th{text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid rgba(255,255,255,.12)}.exp-tbl td{border-bottom:1px solid rgba(255,255,255,.06)}`; document.head.appendChild(st); })();
+/* ================================================================
+   HOW-TO-PLAY GUIDE — shown before the first game (players) and after expert registration (experts).
+   Re-open any time from the 📖 button (top bar) or the title screen link. In-game it opens as a modal.
+   ================================================================ */
+const GUIDE_STEPS=[
+ ['brief','รับเวร','อ่านข้อมูลผู้ป่วยจากการส่งเวร: อายุ การวินิจฉัย ประวัติ และสิ่งที่ต้องเฝ้าระวัง'],
+ ['tool','เลือก EWS','เลือกเครื่องมือให้ตรงกลุ่มผู้ป่วย: MEWS ≥ 15 ปี · PEWS > 28 วัน – < 15 ปี · NEWS ≤ 28 วัน · MEOWS ครรภ์ ≥ 20 สัปดาห์'],
+ ['measure','วัด & ให้คะแนน','เลือกอุปกรณ์วัดสัญญาณชีพ แล้วให้คะแนนทีละพารามิเตอร์ ระบบรวมคะแนนจากที่คุณให้'],
+ ['first','ช่วยเหลือทันที','ช่วยผู้ป่วยก่อนแจ้งทีม เช่น จัดท่า ให้ออกซิเจน (เปลี่ยนหรือเพิ่มชนิดได้) เรียกพยาบาลมาช่วย · ถ้าช้าหรือไม่ช่วย ผู้ป่วยจะทรุดลง'],
+ ['reason','วิเคราะห์','เลือกปัญหาสำคัญของผู้ป่วย ผลที่อาจเกิดขึ้น และข้อมูลสนับสนุน (cue) จากตัวเลือก'],
+ ['tier','Protocol','เลือกแนวปฏิบัติตามช่วงคะแนนรวม EWS ของผู้ป่วย'],
+ ['decision','ตัดสินใจ','ตัดสินว่าต้องตามทีม ERT หรือไม่ ตามคะแนนและ critical criteria ในนโยบาย'],
+ ['phone','ประกาศ','กดหมายเลข 3458 และประกาศตามรูปแบบ: กลุ่มทีม สถานที่ ห้อง (กด 6 เมื่อสงสัย stroke)'],
+ ['care','ดูแลเบื้องต้น','ระหว่างรอทีม เลือกการพยาบาลจากถาดตามหมวด เปิด Emergency cart และช่วยแพทย์ เช่น ใส่ท่อช่วยหายใจ · pacing · cardioversion ด้วย ZOLL'],
+ ['handover','ส่งต่อ ERT','ส่งข้อมูลให้ทีมแบบ SBAR: สถานการณ์ ภูมิหลัง การประเมิน และข้อเสนอ'],
+ ['result','สรุปเคส','ดูคะแนนรายด้าน เฉลย และสิ่งที่ควรพัฒนา']];
+const GUIDE_LEVELS=[
+ ['1','ฝึกหัด · Guided','มีตาราง EWS บนจอและคำใบ้ทุกขั้นตอน ไม่จับเวลา เหมาะกับการเริ่มต้น'],
+ ['2','ปฏิบัติการ · Solo','ไม่มีคำใบ้ เปิดตารางได้แต่หัก 2 คะแนน ต้องตัดสินใจภายใน 120 วินาที'],
+ ['3','ผู้เชี่ยวชาญ · Expert','ไม่มีตาราง มีเคสหลอก (อายุ/อายุครรภ์ก้ำกึ่ง) ผู้ป่วยทรุดลงต่อเนื่อง ตัดสินใจใน 90 วินาที'],
+ ['4','Drill check','สุ่ม 5 เคส ครบ 4 กลุ่มผู้ป่วย ผ่านเมื่อได้ ≥ 80% และไม่มี Critical miss ก่อนลง in-situ drill']];
+
+function guideHTML(tab){
+  const ex=tab==='expert';
+  const tabs=`<div class="gd-tabs" role="tablist"><button role="tab" data-gt="player" aria-selected="${!ex}">🎮 สำหรับผู้เล่น</button><button role="tab" data-gt="expert" aria-selected="${ex}">🎓 สำหรับผู้เชี่ยวชาญ</button></div>`;
+  if(!ex) return tabs+`
+   <div class="gd-hero"><div><div class="eyebrow">วิธีเล่น · ERT 3458 Ward Sim</div><h2>เห็นสัญญาณก่อน ตามทีมทัน</h2>
+    <p>คุณเป็นพยาบาลประจำหอผู้ป่วย ในแต่ละเคสต้องประเมิน Early Warning Score ให้ถูกเครื่องมือ ช่วยเหลือผู้ป่วยทันที และตัดสินใจเรียกทีม ERT 3458 ให้ทันเวลา ตามนโยบาย W/P-02.1-BHQ-013 Rev.07</p></div>
+    <div class="gd-time"><b>5–8</b><span>นาที / เคส</span></div></div>
+   <h3 class="gd-h">ขั้นตอนในแต่ละเคส</h3>
+   <ol class="gd-steps">${GUIDE_STEPS.map(([k,t,d],i)=>`<li class="${k==='first'||k==='care'?'hl':''}"><span class="gd-n">${i+1}</span><div><b>${t}</b><p>${d}</p></div></li>`).join('')}</ol>
+   <p class="gd-note">ถ้าผู้ป่วย<b>ไม่เข้าเกณฑ์</b>ตามทีม ขั้นที่ 8–10 จะเปลี่ยนเป็น “แผนการพยาบาล” และ “รายงานแพทย์แบบ SBAR”</p>
+   <div class="gd-grid">
+    <div class="gd-card"><h3>หน้าจอในเกม</h3><ul>
+      <li><b>แถบสัญญาณชีพ</b> ด้านล่างกลาง ค่าและลูกศร ▲▼ เปลี่ยนตามการพยาบาลที่คุณทำ</li>
+      <li><b>แผงคำสั่ง</b> ด้านซ้าย: โจทย์ ตัวเลือก และปุ่มไปขั้นถัดไป</li>
+      <li><b>แถบขั้นตอน</b> ด้านล่างสุด: บอกว่าตอนนี้อยู่ขั้นไหน</li>
+      <li>มุมขวาบน: 📋 ตาราง EWS (ตามระดับ) · 💬 ส่งความคิดเห็น · 🔈 เสียง · 📖 วิธีเล่น · 🏠 หน้าแรก</li></ul></div>
+    <div class="gd-card"><h3>การให้คะแนน (100 คะแนน / เคส)</h3><ul class="gd-dom">${DOMAINS.map(([k,l,m])=>`<li><span>${esc(l)}</span><b class="mono">${m}</b></li>`).join('')}</ul>
+      <p class="gd-warn"><b>Critical miss</b> = ผู้ป่วยเข้าเกณฑ์แต่ไม่ได้ตามทีม · ทำให้ไม่ผ่านรอบประเมิน</p></div></div>
+   <h3 class="gd-h">ระดับความยาก</h3>
+   <div class="gd-levels">${GUIDE_LEVELS.map(([n,t,d])=>`<div class="gd-lv lv${n}"><span>${n}</span><b>${t}</b><p>${d}</p></div>`).join('')}</div>
+   <div class="gd-card"><h3>เคล็ดลับ</h3><ul>
+     <li><b>ประเมินก่อน แล้วช่วยทันที</b> ทุกการกระทำใช้เวลาในเกม ผู้ป่วยตอบสนองต่อสิ่งที่คุณทำ (หรือไม่ได้ทำ)</li>
+     <li><b>ประเมินซ้ำหลังให้การช่วยเหลือ</b> ถ้าอาการแย่ลงต้องตามทีมซ้ำ</li>
+     <li>ลอง <b>Equipment lab</b> ในหน้าเลือกระดับ เพื่อฝึก Emergency cart · ZOLL R Series · ช่วยใส่ท่อช่วยหายใจ ก่อนเจอในเคสจริง</li>
+     <li>ใช้ Chrome หรือ Edge รุ่นล่าสุด เปิดเสียง/ใส่หูฟังเพื่อฟังผู้ป่วยและทีม</li></ul></div>`;
+  return tabs+`
+   <div class="gd-hero exp"><div><div class="eyebrow" style="color:var(--gold)">Expert review · ผู้ทรงคุณวุฒิ</div><h2>ช่วยตรวจสอบความถูกต้องของเกม</h2>
+    <p>ขอความเห็นจากผู้เชี่ยวชาญเพื่อตรวจสอบ<b>ความตรงเชิงเนื้อหา</b> (ตรงกับนโยบายและแนวปฏิบัติทางคลินิก) และ<b>ความสะดวกในการใช้งาน</b> ก่อนนำไปใช้สอนและประเมินพยาบาล</p></div>
+    <div class="gd-time"><b>30–45</b><span>นาที โดยประมาณ</span></div></div>
+   <h3 class="gd-h">ขั้นตอนการประเมิน</h3>
+   <ol class="gd-steps exp">
+    <li><span class="gd-n">1</span><div><b>ลงทะเบียน</b><p>ชื่อ วิชาชีพ ความเชี่ยวชาญ ประสบการณ์ และยืนยันความยินยอม · ถ้าใช้เครื่องร่วมกับผู้อื่น ให้ลงทะเบียนด้วยชื่อตนเองเสมอ</p></div></li>
+    <li><span class="gd-n">2</span><div><b>เลือกเคสที่ต้องการตรวจ</b><p>ทุกเคสเปิดให้เล่นได้ทันที แบ่งเป็นผู้ใหญ่ · เด็ก · ทารกแรกเกิด · หญิงตั้งครรภ์ <b>แนะนำอย่างน้อย 1 เคสต่อกลุ่ม</b> และลอง Equipment lab · ลองตอบผิดโดยตั้งใจเพื่อดูว่าเฉลยและคะแนนเหมาะสมหรือไม่</p></div></li>
+    <li><span class="gd-n">3</span><div><b>ประเมินรายเคส (4 ข้อ)</b><p>หน้าสรุปเคสจะมีกรอบสีทอง ให้คะแนน 1–4 ใน 4 ด้าน (ข้อมูลผู้ป่วย · คะแนน EWS/การตัดสินใจ · การพยาบาลและเฉลย · ความสมจริง) พร้อมข้อเสนอแนะ แล้วกด <b>บันทึกการประเมินเคส</b></p></div></li>
+    <li><span class="gd-n">4</span><div><b>แบบประเมินภาพรวม (~10 นาที)</b><p>กดปุ่ม <span class="exp-chip" style="pointer-events:none"><b>EXPERT</b></span> มุมขวาบน → แบบประเมินภาพรวม: ความตรงเชิงเนื้อหา 15 องค์ประกอบ · ความสะดวกในการใช้งาน (SUS) 10 ข้อ · ความเห็นโดยรวม</p></div></li></ol>
+   <div class="gd-grid">
+    <div class="gd-card"><h3>มาตรวัดความตรงเชิงเนื้อหา (1–4)</h3><ul class="gd-scale">
+      <li><b>4</b> สอดคล้อง / ถูกต้องมาก</li><li><b>3</b> สอดคล้อง ปรับปรุงเล็กน้อย</li><li><b>2</b> ต้องปรับปรุงมาก <span class="muted">· ระบุสิ่งที่ควรแก้</span></li><li><b>1</b> ไม่สอดคล้อง / ไม่ถูกต้อง <span class="muted">· ระบุสิ่งที่ควรแก้</span></li></ul>
+      <p class="gd-note">ใช้คำนวณ I-CVI, S-CVI และ modified kappa · SUS ใช้มาตร 1–5 (ไม่เห็นด้วยอย่างยิ่ง – เห็นด้วยอย่างยิ่ง)</p></div>
+    <div class="gd-card"><h3>ข้อมูลของคุณ</h3><ul>
+      <li>รายงานผลเป็น<b>ภาพรวม ไม่ระบุชื่อ</b> ใช้เพื่อพัฒนาเกมเท่านั้น</li>
+      <li>แก้ไขและส่งซ้ำได้ ระบบใช้คำตอบล่าสุด</li>
+      <li>ผลการเล่นของผู้เชี่ยวชาญไม่นำไปรวมกับคะแนนผู้เรียน</li>
+      <li>พบปัญหาเฉพาะจุดระหว่างเล่น กดปุ่ม 💬 มุมขวาบนได้ทุกหน้าจอ ระบบบันทึกเคสและขั้นตอนให้อัตโนมัติ</li></ul></div></div>
+   <details class="gd-card"><summary><b>ดูขั้นตอนการเล่นในแต่ละเคส</b></summary><ol class="gd-steps" style="margin-top:10px">${GUIDE_STEPS.map(([k,t,d],i)=>`<li><span class="gd-n">${i+1}</span><div><b>${t}</b><p>${d}</p></div></li>`).join('')}</ol></details>`;
+}
+function guideSeen(tab){ return !!LS.get('ert.guide.hide.'+tab,false); }
+function showGuide(tab,then,opt={}){
+  const inGame=!$('#scr-game').hidden; let cur=tab||'player'; const vis=$$('.screen').find(s=>!s.hidden)?.id; const prev=vis&&vis!=='scr-guide'?vis:'scr-title';
+  const foot=()=>`<div class="gd-foot"><label class="gd-skip"><input type="checkbox" id="gdSkip" ${guideSeen(cur)?'checked':''}> ไม่ต้องแสดงอีกก่อนเริ่มเล่น</label><button class="btn ${cur==='expert'?'gold':'primary'} right-al" id="gdGo">${then?(cur==='expert'?'เริ่มประเมิน →':'เข้าใจแล้ว เริ่มเล่น →'):'ปิด'}</button></div>`;
+  const wire=root=>{ root.querySelectorAll('[data-gt]').forEach(b=>b.onclick=()=>{ cur=b.dataset.gt; draw(); });
+    const go=root.querySelector('#gdGo'); go.onclick=()=>{ LS.set('ert.guide.hide.'+cur,!!root.querySelector('#gdSkip').checked);
+      if(inGame) closeModal(); if(then) then(); else if(!inGame) show(prev); }; };
+  let host;
+  const draw=()=>{ const html=`<div class="gd">${guideHTML(cur)}${foot()}</div>`;
+    if(inGame){ modal(`<div class="mhead"><div><div class="eyebrow">วิธีเล่น</div></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>${html}`); $('#mbox').classList.add('wide'); host=$('#mbox'); }
+    else { $('#scr-guide').innerHTML=html; show('scr-guide'); host=$('#scr-guide'); host.scrollTop=0; }
+    wire(host); };
+  draw();
+}
+const guideHidden=tab=>!!LS.get('ert.guide.hide.'+tab,false);
+
+// screen container
+{ const s=document.createElement('section'); s.id='scr-guide'; s.className='screen'; s.hidden=true; $('#scr-title').after(s); }
+{ const _s=show; show=function(id){ _s(id); if(id==='scr-guide') $('#stage').style.filter='blur(6px) brightness(.55)'; }; }
+// before the first game: after login, before the avatar
+{ const _oa=openAvatar; openAvatar=function(){ if(!guideHidden('player')&&!openAvatar._g){ openAvatar._g=true; showGuide('player',()=>{ _oa(); }); return; } _oa(); }; }
+// experts: after registration, before the case list
+{ const _er=expRegister; expRegister=function(then){ _er(()=>{ const next=then||openLevels; if(guideHidden('expert')) next(); else showGuide('expert',next); }); }; }
+// top bar 📖 button + title-screen link
+{ const b=document.createElement('button'); b.className='iconbtn'; b.id='btnGuide'; b.title='วิธีเล่น'; b.setAttribute('aria-label','วิธีเล่น');
+  b.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2z"/><path d="M20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2z"/></svg>';
+  b.onclick=()=>showGuide(EXP.on()?'expert':'player'); $('#btnFb').before(b);
+  const f=$('#loginForm'); if(f){ const a=document.createElement('button'); a.type='button'; a.className='btn ghost sm'; a.id='btnGuideTitle'; a.textContent='📖 วิธีเล่น / คำแนะนำก่อนเริ่ม'; a.onclick=()=>showGuide('player'); f.querySelector('button[type=submit]').after(a); } }
+
+(()=>{ const st=document.createElement('style'); st.textContent=`
+ #scr-guide{z-index:12}
+ .gd{max-width:1000px;margin:0 auto;display:grid;gap:14px}
+ #mbox .gd{gap:12px}
+ .gd-tabs{display:flex;gap:6px;flex-wrap:wrap}.gd-tabs button{font:600 14px inherit;font-family:inherit;padding:8px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.04);color:inherit;cursor:pointer}
+ .gd-tabs button[aria-selected="true"]{background:var(--teal);border-color:var(--teal);color:#06202b}
+ .gd-tabs button[data-gt="expert"][aria-selected="true"]{background:var(--gold);border-color:var(--gold)}
+ .gd-hero{display:grid;grid-template-columns:1fr auto;gap:18px;align-items:center;padding:20px 22px;border-radius:18px;background:linear-gradient(135deg,rgba(46,196,182,.14),rgba(26,43,76,.55));border:1px solid rgba(46,196,182,.35)}
+ .gd-hero.exp{background:linear-gradient(135deg,rgba(231,181,76,.14),rgba(26,43,76,.55));border-color:rgba(231,181,76,.4)}
+ .gd-hero h2{font-size:clamp(20px,3vw,28px);margin:4px 0 6px}.gd-hero p{margin:0;font-size:14.5px;line-height:1.65;color:#d6e2ef}
+ .gd-time{text-align:center;padding:10px 16px;border-radius:14px;background:rgba(0,0,0,.25)}.gd-time b{display:block;font:700 26px var(--f-mono);color:var(--gold)}.gd-time span{font-size:12px;color:var(--muted)}
+ .gd-h{font-size:16px;margin:4px 0 0}
+ .gd-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px}
+ .gd-steps li{display:grid;grid-template-columns:30px 1fr;gap:10px;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07)}
+ .gd-steps li.hl{border-color:rgba(46,196,182,.45);background:rgba(46,196,182,.07)}
+ .gd-steps.exp{grid-template-columns:1fr 1fr}@media(max-width:700px){.gd-steps.exp{grid-template-columns:1fr}}
+ .gd-n{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font:700 13px var(--f-mono);background:var(--gold);color:#0b1a2e}
+ .gd-steps b{font-size:14.5px}.gd-steps p{margin:2px 0 0;font-size:13px;line-height:1.55;color:#c4d2e1}
+ .gd-note{font-size:12.5px;color:var(--muted);margin:0}
+ .gd-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:760px){.gd-grid{grid-template-columns:1fr}.gd-hero{grid-template-columns:1fr}}
+ .gd-card{padding:14px 16px;border-radius:14px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08)}
+ .gd-card h3{font-size:15px;margin:0 0 8px}.gd-card ul{margin:0;padding-left:18px;display:grid;gap:6px;font-size:13.5px;line-height:1.55}
+ .gd-card summary{cursor:pointer}
+ .gd-dom{list-style:none;padding:0 !important}.gd-dom li{display:flex;justify-content:space-between;gap:10px;border-bottom:1px dashed rgba(255,255,255,.08);padding-bottom:4px}.gd-dom b{color:var(--gold)}
+ .gd-scale{list-style:none;padding:0 !important}.gd-scale b{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:6px;background:var(--gold);color:#0b1a2e;font-family:var(--f-mono);margin-right:8px}
+ .gd-warn{margin:10px 0 0;font-size:12.5px;padding:8px 10px;border-radius:10px;background:rgba(239,75,83,.12);border:1px solid rgba(239,75,83,.35)}
+ .gd-levels{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}@media(max-width:860px){.gd-levels{grid-template-columns:1fr 1fr}}@media(max-width:480px){.gd-levels{grid-template-columns:1fr}}
+ .gd-lv{padding:12px;border-radius:14px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);display:grid;gap:4px}
+ .gd-lv span{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font:700 15px var(--f-mono);color:#0b1a2e}
+ .gd-lv.lv1 span{background:var(--ok)}.gd-lv.lv2 span{background:var(--blue)}.gd-lv.lv3 span{background:var(--gold)}.gd-lv.lv4 span{background:var(--red);color:#fff}
+ .gd-lv b{font-size:14px}.gd-lv p{margin:0;font-size:12.5px;line-height:1.5;color:#c4d2e1}
+ .gd-foot{position:sticky;bottom:0;display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 14px;border-radius:14px;background:rgba(11,26,46,.92);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(8px)}
+ .gd-skip{font-size:13px;display:flex;gap:6px;align-items:center;color:var(--muted)}`; document.head.appendChild(st); })();
 </script>
 
 </body>
