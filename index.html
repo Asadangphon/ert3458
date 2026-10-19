@@ -2,13 +2,18 @@
 <html lang="th">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 </head>
 <body>
 <script>/* ERT_BACKEND: ใส่ URL ของ Google Apps Script Web App (ลงท้าย /exec) เพื่อส่งผลเข้า Google Sheet · เว้นว่างเมื่อใช้ใน claude.ai หรือในเครื่อง */ window.ERT_BACKEND="https://script.google.com/macros/s/AKfycbxR8-UM3hefc-Al8S-B3vO68nXRF1bjQznbAycTqmSxYx_Dqd91fwoeANXuZC1zyGoG/exec";</script>
-<title>ERT 3458 Ward Sim</title>
+<title>SENTINEL · ERT 3458</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1a2e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SENTINEL">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -78,6 +83,13 @@ label.fld{display:grid;gap:5px;font-size:13px;color:var(--muted)}
 #scr-title{display:grid;place-items:center}
 .title-wrap{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:28px;max-width:1080px;width:100%;align-items:center}
 .hero h1{font-size:clamp(34px,5.4vw,64px);line-height:1.02;font-weight:700}
+.sn-title{font-family:var(--f-display);font-size:clamp(46px,8vw,96px)!important;letter-spacing:.06em;line-height:.95!important;display:flex;align-items:center;gap:14px;background:linear-gradient(180deg,#fff 30%,#bfe9e4);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sn-ecg{width:clamp(56px,8vw,110px);height:auto;flex:none}.sn-ecg path{fill:none;stroke:var(--red);stroke-width:3.2;stroke-linejoin:round;stroke-linecap:round;stroke-dasharray:200;stroke-dashoffset:200;animation:sndash 2.4s ease-in-out infinite;filter:drop-shadow(0 0 6px rgba(239,75,83,.6))}
+@keyframes sndash{0%{stroke-dashoffset:200}55%,100%{stroke-dashoffset:0}}
+@media (prefers-reduced-motion:reduce){.sn-ecg path{animation:none;stroke-dashoffset:0}}
+.sn-tag{font-family:var(--f-display);font-size:clamp(18px,2.4vw,26px);color:#d9e6f2;margin-top:6px;letter-spacing:.01em}.sn-tag b{color:var(--teal)}
+.sn-th{font-size:clamp(16px,2vw,21px);font-weight:600;color:#e8eef5;margin:4px 0 2px}.sn-th .num{font-family:var(--f-mono);color:var(--red);font-weight:700;letter-spacing:.04em;margin-left:4px}
+.brand .brand-name{letter-spacing:.14em}
 .hero h1 .num{font-family:var(--f-mono);color:var(--red);text-shadow:0 0 24px rgba(239,75,83,.45)}
 .hero p{color:var(--muted);max-width:52ch;font-size:16px}
 .ews-pills{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
@@ -264,7 +276,7 @@ table.dt td.n{font-family:var(--f-mono);text-align:right}
   <div id="fallback2d" hidden><div class="fb"><h2>โหมดไม่มีภาพ 3 มิติ</h2><p>อุปกรณ์นี้โหลดภาพ 3D ไม่ได้ (อาจไม่มีอินเทอร์เน็ตหรือไม่รองรับ WebGL) เกมยังเล่นได้ครบทุกขั้นตอนในโหมดข้อความ</p></div></div>
 
   <header id="topbar">
-    <div class="brand"><span class="tag">ERT 3458</span><span>Ward Sim</span></div>
+    <div class="brand"><span class="tag">ERT 3458</span><span class="brand-name">SENTINEL</span></div>
     <div class="tb-spacer"></div>
     <span class="chip hide-sm" id="chipPlayer" hidden></span>
     <span class="chip" id="chipCase" hidden></span>
@@ -279,8 +291,10 @@ table.dt td.n{font-family:var(--f-mono);text-align:right}
   <section id="scr-title" class="screen">
     <div class="title-wrap">
       <div class="hero">
-        <div class="eyebrow">Early Warning Sign &amp; Emergency Response Team</div>
-        <h1>เห็นสัญญาณก่อน<br>ตามทีมทัน <span class="num">3458</span></h1>
+        <div class="eyebrow">Early Warning &amp; Rapid Response Simulation</div>
+        <h1 class="sn-title">SENTINEL<svg class="sn-ecg" viewBox="0 0 120 40" aria-hidden="true"><path d="M0 22h34l6-12 8 26 7-30 6 16h59"/></svg></h1>
+        <div class="sn-tag">Recognize early. <b>Respond fast.</b></div>
+        <div class="sn-th">เห็นสัญญาณก่อน ตามทีมทัน <span class="num">ERT 3458</span></div>
         <p>เกมจำลองหอผู้ป่วยแบบ 3 มิติ ฝึกประเมิน Early Warning Score ให้ตรงตามอายุและประเภทผู้ป่วย ตัดสินใจตาม Management Protocol ประกาศ ERT ให้ถูกต้อง และให้การดูแลเบื้องต้นก่อนทีมมาถึง</p>
         <div class="ews-pills">
           <span class="ews-pill">MEWS<small>≥ 15 ปี</small></span>
@@ -3544,7 +3558,7 @@ spawnERT=function(){
   const team=[
     mk({gender:'M',coat:true,scrub:'#1A2B4C',skin:SKIN[1],hairColor:HAIRC[0],hairStyle:'short',acc:new Set(['steth','badge']),height:176,name:'ERT MD'}),
     mk({gender:'F',scrub:'#1A2B4C',skin:SKIN[0],hairColor:HAIRC[1],hairStyle:'bun',acc:new Set(['scrubcap','badge']),height:162,name:'ERT RN'}),
-    mk({gender:'M',scrub:'#1A2B4C',skin:SKIN[2],hairColor:HAIRC[0],hairStyle:'crew',acc:new Set(['badge']),height:172,name:'ERT RN'}),
+    mk({gender:'M',scrub:'#1A2B4C',skin:SKIN[5],hairColor:HAIRC[0],hairStyle:'crew',acc:new Set(['badge']),height:172,name:'ERT RN'}),
   ];
   // the ERT bag and transport monitor come on a small trolley pushed by the ERT nurse (nothing is strapped to anyone's body)
   const tr=buildErtTrolley(); W3.ward.add(tr); (W3.ertProps=W3.ertProps||[]).push(tr);
@@ -3929,7 +3943,7 @@ ACTIONS.help={t:'ขอความช่วยเหลือ: เรียก�
 TRAY_LABEL.help='📣 ขอพยาบาลมาช่วยที่เตียง (ช่วยบีบ Ambu bag / จัดท่า / ห้ามเลือด)';
 NA_SCOPE.add('help');
 function spawnHelper(){ if(!G3.ok||(W3.helpers&&W3.helpers.length)) return W3.helpers&&W3.helpers[0];
-  const g=playerGender()==='M'?'F':'M'; const o={gender:g,scrub:'#6E1F2D',skin:SKIN[g==='F'?0:2],hairColor:HAIRC[0],hairStyle:g==='F'?'bun':'short',acc:new Set(['badge','watch']),height:g==='F'?160:172,name:'RN'};
+  const g=playerGender()==='M'?'F':'M'; const o={gender:g,scrub:'#6E1F2D',skin:SKIN[g==='F'?0:5],hairColor:HAIRC[0],hairStyle:g==='F'?'bun':'short',acc:new Set(['badge','watch']),height:g==='F'?160:172,name:'RN'};
   const t=glbFor(o); const h=t?instGLB(t,o):buildPerson(o); h.position.set(3.0,0,1.6); W3.ward.add(h); W3.helpers=[h];
   walkTo(h,-.9,-1.35,()=>{ faceTo(h,0,-1.45); if(C&&C.done.has('bvm')) helperBag(); });
   setTimeout(()=>sayAs('help',g==='F'?'มาแล้วค่ะ ให้ช่วยอะไรคะ':'มาแล้วครับ ให้ช่วยอะไรครับ'),1800);
@@ -4096,7 +4110,7 @@ function rFirst(){
 // thinking time passes for the patient too (capped), applied when the call is made
 { const _g=gradeCall; gradeCall=function(){ if(C&&C.firstEndT){ const m=Math.min(2,(performance.now()-C.firstEndT)/45000); if(m>.2) evolve(m); } _g(); }; }
 // EWS is scored on first-contact values, while the bedside monitor keeps showing the live patient
-{ const _m=rMeasure; rMeasure=function(){ const live=(FX.vitCopy&&!C.cs.pre)?GS.vit:null; _m(); if(live) GS.vit=live; }; }
+{ const _m=rMeasure; rMeasure=function(){ const live=(FX.vitCopy&&!(C.pre&&!C.pre.done))?GS.vit:null; _m(); if(live) GS.vit=live; }; }
 
 /* ---------- the patient changes with time and care ---------- */
 function evolve(dt){
@@ -4541,8 +4555,9 @@ const XS={
         low:o.rows.filter(r=>EXP_CASE.some(([k])=>+r[k]&&+r[k]<=2)).length,comments:o.rows.filter(r=>r.comment).map(r=>({who:r.name,prof:r.prof,t:r.comment}))}; })
       .sort((a,b)=>(a.mean??9)-(b.mean??9));
     const prof={}; forms.forEach(f=>prof[f.prof||'ไม่ระบุ']=(prof[f.prof||'ไม่ระบุ']||0)+1);
+    const dept={}; forms.forEach(f=>{ const d=f.deptLabel||f.dept||'ไม่ระบุ'; dept[d]=(dept[d]||0)+1; });
     const yrs=forms.map(f=>+f.years).filter(x=>x>=0);
-    return {N,items,scviAve:iv.length?this.mean(iv.map(i=>i.icvi)):null,scviUA:iv.length?iv.filter(i=>i.icvi===1).length/iv.length:null,
+    return {N,dept,items,scviAve:iv.length?this.mean(iv.map(i=>i.icvi)):null,scviUA:iv.length?iv.filter(i=>i.icvi===1).length/iv.length:null,
       sus:{n:sus.length,mean:this.mean(sus),sd:this.sd(sus),min:sus.length?Math.min(...sus):null,max:sus.length?Math.max(...sus):null},
       overall:{n:ov.length,mean:this.mean(ov),sd:this.sd(ov)},rec,cases,prof,years:{mean:this.mean(yrs),sd:this.sd(yrs),n:yrs.length},caseRaters:new Set(caseRows.map(r=>r.expertId)).size};
   }
@@ -4552,12 +4567,12 @@ const f2=(x,d=2)=>x==null||isNaN(x)?'—':(+x).toFixed(d);
 
 /* ---------- storage ---------- */
 async function expSave(kind,entry){
-  if(kind==='form') LS.set('ert.expert.form',entry); else { const c=EXP.cases(); c[entry.caseId]=entry; LS.set('ert.expert.cases',c); }
+  if(kind==='form') LS.set('ert.expert.form',entry); else if(kind==='case'){ const c=EXP.cases(); c[entry.caseId]=entry; LS.set('ert.expert.cases',c); }
   await Store.ready;
-  if(Store.mode==='sheet'){ await Sheet.queue({a:kind==='form'?'expert':'expertCase',qid:kind+':'+entry.expertId+(entry.caseId?':'+entry.caseId:''),entry}); return 'sheet'; }
+  if(Store.mode==='sheet'){ await Sheet.queue({a:kind==='form'?'expert':kind==='draft'?'expertDraft':'expertCase',qid:kind+':'+entry.expertId+(entry.caseId?':'+entry.caseId:''),entry}); return 'sheet'; }
   if(Store.mode==='db'){ const ref=Store.db.doc('feedback/'+Store.uid); const snap=await ref.get(); const cur=snap.exists?snap.data():{entries:[]};
     const nx=Object.assign({entries:[]},cur,{name:cur.name||entry.name,role:cur.role||entry.prof,updatedAt:entry.ts});
-    if(kind==='form') nx.expert=entry; else nx.expertCases=Object.assign({},cur.expertCases||{},{[entry.caseId]:entry});
+    nx.expertMe=EXP.me; if(kind==='form') nx.expert=entry; else if(kind==='draft') nx.expertDraft=entry; else nx.expertCases=Object.assign({},cur.expertCases||{},{[entry.caseId]:entry});
     await ref.set(nx); return 'db'; }
   return 'local';
 }
@@ -4569,38 +4584,93 @@ async function expLoadAll(){
   return {forms:[...forms.values()],cases:[...cases.values()]};
 }
 
-/* ---------- registration ---------- */
-function expRegister(then){
-  const me=LS.get('ert.expert',{})||{};
-  modal(`<div class="mhead"><div><div class="eyebrow">Expert review · ผู้ทรงคุณวุฒิ</div><h2 style="font-size:19px">ลงทะเบียนผู้เชี่ยวชาญประเมินเกม</h2></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>
-   <p class="muted" style="margin:0;font-size:13.5px">ขอบคุณที่ช่วยตรวจสอบความตรงเชิงเนื้อหาของเกม ERT 3458 · ทุกเคสเปิดให้เล่นได้ทันที หลังจบแต่ละเคสจะมีแบบประเมินเคสสั้น ๆ 4 ข้อ และมีแบบประเมินภาพรวม (15 ข้อ + ความสะดวกในการใช้งาน 10 ข้อ) ใช้เวลาประมาณ 10 นาที</p>
-   <label class="fld">ชื่อ-นามสกุล<input class="inp" id="exN" maxlength="60" value="${esc(me.name||GS.player.name||'')}"></label>
-   <div class="seg" style="grid-template-columns:1fr 1fr"><label class="fld">วิชาชีพ / บทบาท<select class="inp" id="exP">${EXP_PROF.map(p=>`<option ${me.prof===p?'selected':''}>${p}</option>`).join('')}</select></label>
-   <label class="fld">ความเชี่ยวชาญ / หน่วยงาน<input class="inp" id="exS" maxlength="60" value="${esc(me.spec||'')}" placeholder="เช่น ICU, อายุรศาสตร์, กุมารเวช"></label></div>
-   <div class="seg" style="grid-template-columns:1fr 1fr"><label class="fld">ประสบการณ์ในสาขา (ปี)<input class="inp" id="exY" type="number" min="0" max="50" value="${esc(me.years??'')}"></label>
-   <label class="fld">สถานที่ปฏิบัติงาน<input class="inp" id="exO" maxlength="60" value="${esc(me.org||'')}" placeholder="เช่น โรงพยาบาลกรุงเทพ สำนักงานใหญ่"></label></div>
-   <label class="flex" style="font-size:13px;gap:8px;align-items:flex-start"><input type="checkbox" id="exC" ${me.consent?'checked':''} style="margin-top:3px"> ยินยอมให้นำคะแนนและความคิดเห็นไปวิเคราะห์ทางสถิติเพื่อพัฒนาเกม โดยรายงานผลในภาพรวม ไม่ระบุชื่อ</label>
-   <div class="flex"><button class="btn primary right-al" id="exGo">เริ่มประเมิน →</button></div>`);
-  $('#exGo').onclick=()=>{ const name=$('#exN').value.trim(); if(!name){ toast('กรอกชื่อก่อน','bad'); return; } if(!$('#exC').checked){ toast('กรุณายืนยันความยินยอม','bad'); return; }
-    const same=me.expertId&&(me.name||'').trim()===name; if(!same){ try{ ['ert.expert.cases','ert.expert.form','ert.expert.draft'].forEach(k=>localStorage.removeItem(k)); }catch(z){} }
-    const e={expertId:same?me.expertId:('X'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)),name,prof:$('#exP').value,spec:$('#exS').value.trim(),years:$('#exY').value===''?'':+$('#exY').value,org:$('#exO').value.trim(),consent:true};
-    LS.set('ert.expert',e); try{ sessionStorage.setItem('ert.expertOn','1'); }catch(x){} EXP.me=e;
-    Object.assign(GS.player,{name,unit:e.spec||e.prof,role:'RN'}); LS.set('ert.player',GS.player); if(!GS.av) GS.av=defaultAv('RN','F');
-    closeModal(); try{ ac(); }catch(x){} expBar(); then?then():openLevels(); };
+/* ---------- registration · welcome back · resume on another device ---------- */
+const EXP_DEPT=['NSO (ฝ่ายการพยาบาล)','ฝ่ายวิชาการพยาบาล','OR','ICU 1','ICU 2','ICU 3','ICU 4','ICU 5','ICU 6','ICU 7','ICU 8','CCU','ER','IPD อายุรกรรม','IPD ศัลยกรรม','กุมารเวชกรรม / PICU','NICU / Nursery','ห้องคลอด / สูติกรรม','OPD','ทีม ERT / Resuscitation','แพทย์ (ระบุภาควิชา/แผนก)','อื่น ๆ (ระบุ)'];
+const expNeedsOther=d=>/ระบุ/.test(d||'');
+function expNewId(){ const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let r=''; for(let i=0;i<6;i++) r+=A[Math.floor(Math.random()*A.length)]; return 'EX-'+r; }
+function expActivate(e,then){ LS.set('ert.expert',e); try{ sessionStorage.setItem('ert.expertOn','1'); }catch(x){} EXP.me=e;
+  Object.assign(GS.player,{name:e.name,unit:e.deptLabel||e.spec||e.prof,role:'RN'}); LS.set('ert.player',GS.player); if(!GS.av) GS.av=defaultAv('RN','F');
+  closeModal(); try{ ac(); }catch(x){} expBar(); expSync(e.expertId).then(n=>{ if(n) { expBar(); if(!$('#scr-level').hidden) openLevels(); } }).catch(()=>{}); then?then():openLevels(); }
+function expProgressTxt(){ const n=Object.keys(EXP.cases()).length, f=EXP.form(), d=LS.get('ert.expert.draft',null);
+  return `ประเมินรายเคสแล้ว <b>${n}</b> เคส · แบบประเมินโดยรวม: <b>${f?'ส่งแล้ว ✓':d?'มีฉบับร่าง (ทำต่อได้)':'ยังไม่เริ่ม'}</b>`; }
+function expRegister(then,opt={}){
+  const me=LS.get('ert.expert',null);
+  if(me&&me.expertId&&!opt.form&&!opt.fresh) return expWelcome(me,then);
+  const v=opt.fresh?{}:(me||{});
+  modal(`<div class="mhead"><div><div class="eyebrow">Expert review · ผู้ทรงคุณวุฒิ</div><h2 style="font-size:19px">${opt.form&&me?'แก้ไขข้อมูลผู้เชี่ยวชาญ':'ลงทะเบียนผู้เชี่ยวชาญประเมินเกม'}</h2></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>
+   <p class="muted" style="margin:0;font-size:13.5px">ไม่จำเป็นต้องทำให้เสร็จในครั้งเดียว ระบบบันทึกทุกเคสที่ประเมินและฉบับร่างแบบประเมินโดยรวมไว้ให้ กลับมาทำต่อได้ด้วยเครื่องเดิม หรือใช้<b>รหัสผู้ประเมิน</b>บนเครื่องอื่น</p>
+   <label class="fld">ชื่อ-นามสกุล<input class="inp" id="exN" maxlength="60" value="${esc(v.name||'')}"></label>
+   <div class="seg" style="grid-template-columns:1fr 1fr"><label class="fld">วิชาชีพ / บทบาท<select class="inp" id="exP">${EXP_PROF.map(p=>`<option ${v.prof===p?'selected':''}>${p}</option>`).join('')}</select></label>
+   <label class="fld">หน่วยงาน / แผนก<select class="inp" id="exD"><option value="">— เลือกหน่วยงาน —</option>${EXP_DEPT.map(p=>`<option ${v.dept===p?'selected':''}>${p}</option>`).join('')}</select></label></div>
+   <label class="fld" id="exDOw" ${expNeedsOther(v.dept)?'':'hidden'}>ระบุหน่วยงาน<input class="inp" id="exDO" maxlength="60" value="${esc(v.deptOther||'')}" placeholder="เช่น Stroke unit, อายุรศาสตร์โรคหัวใจ"></label>
+   <div class="seg" style="grid-template-columns:1fr 1fr"><label class="fld">ความเชี่ยวชาญเฉพาะ (ถ้ามี)<input class="inp" id="exS" maxlength="60" value="${esc(v.spec||'')}" placeholder="เช่น Critical care, Resuscitation"></label>
+   <label class="fld">ประสบการณ์ในสาขา (ปี)<input class="inp" id="exY" type="number" min="0" max="50" value="${esc(v.years??'')}"></label></div>
+   <label class="fld">สถานที่ปฏิบัติงาน<input class="inp" id="exO" maxlength="60" value="${esc(v.org||'โรงพยาบาลกรุงเทพ สำนักงานใหญ่')}"></label>
+   <label class="flex" style="font-size:13px;gap:8px;align-items:flex-start"><input type="checkbox" id="exC" ${v.consent?'checked':''} style="margin-top:3px"> ยินยอมให้นำคะแนนและความคิดเห็นไปวิเคราะห์ทางสถิติเพื่อพัฒนาเกม โดยรายงานผลในภาพรวม ไม่ระบุชื่อ</label>
+   <div class="flex"><button class="btn ghost sm" id="exHave">มีรหัสผู้ประเมินแล้ว · กลับมาทำต่อ</button><button class="btn primary right-al" id="exGo">${opt.form&&me?'บันทึก':'เริ่มประเมิน →'}</button></div>`);
+  $('#exD').onchange=()=>{ $('#exDOw').hidden=!expNeedsOther($('#exD').value); };
+  $('#exHave').onclick=()=>expResume(then);
+  $('#exGo').onclick=()=>{ const name=$('#exN').value.trim(), dept=$('#exD').value, deptOther=$('#exDO').value.trim();
+    if(!name){ toast('กรอกชื่อก่อน','bad'); return; } if(!dept){ toast('เลือกหน่วยงาน / แผนก','bad'); return; } if(expNeedsOther(dept)&&!deptOther){ toast('ระบุหน่วยงาน','bad'); return; }
+    if(!$('#exC').checked){ toast('กรุณายืนยันความยินยอม','bad'); return; }
+    const keep=me&&me.expertId&&!opt.fresh&&(opt.form||(me.name||'').trim()===name);
+    if(!keep){ try{ ['ert.expert.cases','ert.expert.form','ert.expert.draft'].forEach(k=>localStorage.removeItem(k)); }catch(z){} }
+    const e={expertId:keep?me.expertId:expNewId(),name,prof:$('#exP').value,dept,deptOther:expNeedsOther(dept)?deptOther:'',spec:$('#exS').value.trim(),years:$('#exY').value===''?'':+$('#exY').value,org:$('#exO').value.trim(),consent:true};
+    e.deptLabel=expNeedsOther(dept)?deptOther:dept;
+    if(!keep) toast('รหัสผู้ประเมินของคุณ: '+e.expertId+' (ดูได้จากปุ่ม EXPERT)','ok',5000);
+    expActivate(e,then); };
 }
+function expWelcome(me,then){
+  modal(`<div class="mhead"><div><div class="eyebrow">Expert review · ยินดีต้อนรับกลับ</div><h2 style="font-size:19px">${esc(me.name)}</h2></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>
+   <div class="muted" style="font-size:13px">${esc([me.prof,me.deptLabel||me.dept||me.spec].filter(Boolean).join(' · '))}</div>
+   <div class="exp-code"><span>รหัสผู้ประเมิน</span><b class="mono">${esc(me.expertId)}</b><small>ใช้รหัสนี้เพื่อทำต่อบนเครื่องอื่น</small></div>
+   <p style="margin:0;font-size:14px">${expProgressTxt()}</p>
+   <div class="flex" style="flex-wrap:wrap"><button class="btn ghost sm" id="exNot">ไม่ใช่ฉัน · ลงทะเบียนใหม่</button><button class="btn ghost sm" id="exEdit">แก้ไขข้อมูล</button><button class="btn gold right-al" id="exCont">ทำต่อ →</button></div>`);
+  $('#exCont').onclick=()=>expActivate(me,then);
+  $('#exEdit').onclick=()=>expRegister(then,{form:true});
+  $('#exNot').onclick=()=>{ try{ ['ert.expert','ert.expert.cases','ert.expert.form','ert.expert.draft'].forEach(k=>localStorage.removeItem(k)); }catch(z){} expRegister(then,{fresh:true}); };
+}
+function expResume(then){
+  modal(`<div class="mhead"><div><div class="eyebrow">Expert review</div><h2 style="font-size:19px">กลับมาทำต่อด้วยรหัสผู้ประเมิน</h2></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>
+   <p class="muted" style="margin:0;font-size:13.5px">รหัสอยู่ที่ปุ่ม EXPERT มุมขวาบนของเครื่องที่เคยใช้ (รูปแบบ EX-XXXXXX)</p>
+   <input class="inp mono" id="exRid" maxlength="24" placeholder="EX-XXXXXX" style="text-transform:uppercase;font-size:18px;letter-spacing:.08em">
+   <div class="flex"><button class="btn ghost sm" id="exBack">← ลงทะเบียนใหม่</button><button class="btn gold right-al" id="exFind">ค้นหาและทำต่อ</button></div>`);
+  $('#exBack').onclick=()=>expRegister(then,{fresh:true});
+  $('#exFind').onclick=async()=>{ const id=$('#exRid').value.trim(); if(!id){ toast('ใส่รหัสผู้ประเมิน','bad'); return; }
+    $('#exFind').disabled=true; try{ const r=await expPull(id); if(!r||!r.me){ toast('ไม่พบรหัสนี้ หรือยังไม่เคยส่งข้อมูลเข้าระบบ','bad'); $('#exFind').disabled=false; return; }
+      expRestore(r); toast('ดึงข้อมูลแล้ว: '+Object.keys(EXP.cases()).length+' เคส','ok'); expActivate(r.me,then); }
+    catch(x){ console.warn(x); toast(Store.mode==='sheet'?'เชื่อมต่อฐานข้อมูลไม่สำเร็จ ลองใหม่อีกครั้ง':'ทำต่อข้ามเครื่องได้เฉพาะเวอร์ชันออนไลน์','bad'); $('#exFind').disabled=false; } };
+}
+/* pull everything stored for one expert (sheet: by code · db: this viewer's own doc) */
+async function expPull(id){ await Store.ready;
+  if(Store.mode==='sheet'){ const r=await Sheet.get({a:'expertGet',id:String(id).trim().toUpperCase()}); if(!r.ok) throw new Error(r.error);
+    const me=r.expert||(r.draft&&r.draft.me)||(r.cases&&r.cases[0]&&r.cases[0].me)||null; return {me,form:r.expert,draft:r.draft&&r.draft.draft,draftTs:r.draft&&r.draft.ts,cases:r.cases||[]}; }
+  if(Store.mode==='db'){ const snap=await Store.db.doc('feedback/'+Store.uid).get(); if(!snap.exists) return null; const x=snap.data();
+    const cs=Object.values(x.expertCases||{}).filter(c=>!id||c.expertId===id); const me=(x.expert&&x.expert.expertId===id?x.expert:null)||x.expertMe||null;
+    return {me:me&&(!id||me.expertId===id)?me:null,form:x.expert&&x.expert.expertId===id?x.expert:null,draft:x.expertDraft&&x.expertDraft.expertId===id?x.expertDraft.draft:null,draftTs:x.expertDraft&&x.expertDraft.ts,cases:cs}; }
+  throw new Error('local'); }
+function expRestore(r){ const pick=o=>({expertId:o.expertId,name:o.name,prof:o.prof,dept:o.dept,deptOther:o.deptOther,deptLabel:o.deptLabel,spec:o.spec,years:o.years,org:o.org,consent:true});
+  if(r.me) r.me=pick(r.me);
+  const c=EXP.cases(); (r.cases||[]).forEach(x=>{ if(!c[x.caseId]||String(c[x.caseId].ts)<String(x.ts)) c[x.caseId]=x; }); LS.set('ert.expert.cases',c);
+  if(r.form&&(!EXP.form()||String(EXP.form().ts)<String(r.form.ts))) LS.set('ert.expert.form',r.form);
+  if(r.draft&&!LS.get('ert.expert.draft',null)) LS.set('ert.expert.draft',r.draft); }
+async function expSync(id){ try{ const before=Object.keys(EXP.cases()).length; const r=await expPull(id); if(!r) return 0; delete r.me; expRestore(r); return Object.keys(EXP.cases()).length-before; }catch(e){ return 0; } }
+let expDraftT=null;
+function expDraftPush(d){ clearTimeout(expDraftT); expDraftT=setTimeout(()=>expSave('draft',{expertId:EXP.me.expertId,ts:new Date().toISOString(),me:EXP.me,draft:d}).catch(()=>{}),4000); }
 function expExit(){ try{ sessionStorage.removeItem('ert.expertOn'); }catch(e){} EXP.me=null; $('#expBar')?.remove(); document.body.classList.remove('expert'); show('scr-title'); }
 
 /* ---------- top bar chip ---------- */
 function expBar(){ document.body.classList.toggle('expert',EXP.on()); if(!EXP.on()){ $('#expBar')?.remove(); return; }
   let b=$('#expBar'); if(!b){ b=document.createElement('button'); b.id='expBar'; b.className='exp-chip'; b.onclick=expPanel; $('#btnFb').before(b); }
-  const n=Object.keys(EXP.cases()).length, f=EXP.form(); b.innerHTML=`<b>EXPERT</b> ${n} เคส · ${f?'ประเมินภาพรวมแล้ว ✓':'ยังไม่ประเมินภาพรวม'}`; }
+  const n=Object.keys(EXP.cases()).length, f=EXP.form(); b.innerHTML=`<b>EXPERT</b> ${n} เคส · ${f?'ประเมินภาพรวมแล้ว ✓':LS.get('ert.expert.draft',null)?'ภาพรวม: ฉบับร่าง':'ยังไม่ประเมินภาพรวม'}`; }
 function expPanel(){ const rated=EXP.cases(), f=EXP.form();
   modal(`<div class="mhead"><div><div class="eyebrow">Expert review · ${esc(EXP.me.name)}</div><h2 style="font-size:19px">ความคืบหน้าการประเมิน</h2></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>
-   <div class="kpis"><div class="kpi"><b>${Object.keys(rated).length}/${CASES.length}</b><span>เคสที่ประเมินแล้ว</span></div><div class="kpi"><b>${f?'✓':'—'}</b><span>แบบประเมินภาพรวม</span></div></div>
+   <div class="kpis"><div class="kpi"><b>${Object.keys(rated).length}/${CASES.length}</b><span>เคสที่ประเมินแล้ว</span></div><div class="kpi"><b>${f?'✓':LS.get('ert.expert.draft',null)?'ร่าง':'—'}</b><span>แบบประเมินภาพรวม</span></div>
+     <div class="kpi exp-code" style="margin:0"><span>รหัสผู้ประเมิน</span><b class="mono">${esc(EXP.me.expertId)}</b><small>ไม่ต้องทำครั้งเดียว · ใช้รหัสนี้ทำต่อบนเครื่องอื่น</small></div></div>
    <p class="muted" style="margin:0;font-size:13px">แนะนำให้เล่นอย่างน้อย 1 เคสต่อกลุ่มผู้ป่วย (ผู้ใหญ่ · เด็ก · ทารกแรกเกิด · หญิงตั้งครรภ์) และลอง Equipment lab ก่อนทำแบบประเมินภาพรวม · กดเลขเคสเพื่อเล่นทันที</p>
    ${expCaseGrid()}
-   <div class="flex"><button class="btn ghost sm" id="exOut">ออกจากโหมดผู้เชี่ยวชาญ</button><button class="btn gold right-al" id="exForm">${f?'แก้ไข':'ทำ'}แบบประเมินภาพรวม →</button></div>`); $('#mbox').classList.add('wide');
-  wireCaseGrid(); $('#exForm').onclick=expForm; $('#exOut').onclick=()=>{ closeModal(); expExit(); }; }
+   <div class="flex"><button class="btn ghost sm" id="exOut">ออกจากโหมดผู้เชี่ยวชาญ</button><button class="btn ghost sm" id="exEd">แก้ไขข้อมูล</button><button class="btn gold right-al" id="exForm">${f?'แก้ไข':'ทำ'}แบบประเมินภาพรวม →</button></div>`); $('#mbox').classList.add('wide');
+  wireCaseGrid(); $('#exForm').onclick=expForm; $('#exOut').onclick=()=>{ closeModal(); expExit(); }; $('#exEd').onclick=()=>expRegister(null,{form:true}); }
 function expCaseGrid(){ const rated=EXP.cases(); const pop={adult:'ผู้ใหญ่',peds:'เด็ก',neo:'ทารกแรกเกิด',ob:'หญิงตั้งครรภ์'};
   const groups={}; CASES.forEach(c=>{ const g=(typeof critPop==='function'?critPop(c.p):'adult'); (groups[g]=groups[g]||[]).push(c); });
   return `<div class="exp-grid">${Object.entries(groups).map(([g,cs])=>`<div><div class="eyebrow" style="margin-bottom:4px">${pop[g]||g} · ${cs.filter(c=>rated[c.id]).length}/${cs.length}</div><div class="exp-cases">${cs.map(c=>`<button class="exp-case${rated[c.id]?' done':''}" data-xc="${c.id}" title="${esc(c.title)} · ระดับ ${c.lv} · ${c.tool}">${c.id}${rated[c.id]?' ✓':''}</button>`).join('')}</div></div>`).join('')}</div>`; }
@@ -4626,7 +4696,7 @@ function wireLikert(root,store,onChange){ xqa('[data-lk]',root).forEach(g=>xqa('
       <div class="flex"><span class="muted" id="exCaseMsg" style="font-size:12px">${prev.ts?'ประเมินไว้แล้ว แก้ไขและบันทึกใหม่ได้':'ให้คะแนนครบ 4 ข้อแล้วกดบันทึก'}</span><button class="btn gold sm right-al" id="exCaseSave">บันทึกการประเมินเคส</button></div>`;
     $('#cpBody').prepend(box); wireLikert(box,v);
     $('#exCaseSave').onclick=async()=>{ if(EXP_CASE.some(([k])=>!v[k])){ toast('ให้คะแนนครบ 4 ข้อก่อน','bad'); return; }
-      const e=Object.assign({id:'XC'+Date.now().toString(36),ts:new Date().toISOString(),expertId:EXP.me.expertId,name:EXP.me.name,prof:EXP.me.prof,caseId:cs.id,title:cs.title,tool:cs.tool,level:cs.lv,score:C.rec?.score},v,{comment:$('#exCm').value.trim()});
+      const e=Object.assign({id:'XC'+Date.now().toString(36),ts:new Date().toISOString(),expertId:EXP.me.expertId,name:EXP.me.name,prof:EXP.me.prof,dept:EXP.me.deptLabel||EXP.me.dept||'',caseId:cs.id,title:cs.title,tool:cs.tool,level:cs.lv,score:C.rec?.score},v,{comment:$('#exCm').value.trim()});
       $('#exCaseSave').disabled=true; try{ await expSave('case',e); $('#exCaseMsg').textContent='บันทึกแล้ว ✓'; toast('บันทึกการประเมินเคสแล้ว','ok'); }catch(x){ console.warn(x); toast('บันทึกในเครื่องแล้ว ส่งเข้าฐานข้อมูลไม่สำเร็จ','bad'); }
       $('#exCaseSave').disabled=false; expBar(); };
   }; }
@@ -4640,7 +4710,7 @@ function wireLikert(root,store,onChange){ xqa('[data-lk]',root).forEach(g=>xqa('
 function expForm(){
   const prev=EXP.form()||LS.get('ert.expert.draft',null)||{}; const cvi=Object.assign({},prev.cvi||{}), sus={}; (prev.sus||[]).forEach((x,i)=>x&&(sus['s'+i]=x)); const note=Object.assign({},prev.note||{});
   let overall=prev.overall||0, rec=prev.rec||'';
-  modal(`<div class="mhead"><div><div class="eyebrow">Expert review · ${esc(EXP.me.name)}</div><h2 style="font-size:19px">แบบประเมินภาพรวมเกม ERT 3458 Ward Sim</h2></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>
+  modal(`<div class="mhead"><div><div class="eyebrow">Expert review · ${esc(EXP.me.name)}</div><h2 style="font-size:19px">แบบประเมินภาพรวม SENTINEL · ERT 3458</h2></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>
    <div class="exp-sec"><h3>ส่วนที่ 1 · ความตรงเชิงเนื้อหา (Content validity)</h3><div class="muted" style="font-size:12.5px">ความสอดคล้องและถูกต้องของแต่ละองค์ประกอบกับนโยบาย W/P-02.1-BHQ-013 Rev.07 และแนวปฏิบัติทางคลินิก<br>1 = ${EXP_L4[0]} · 2 = ${EXP_L4[1]} · 3 = ${EXP_L4[2]} · 4 = ${EXP_L4[3]} · ให้ 1–2 กรุณาระบุสิ่งที่ควรแก้</div>
     ${EXP_CVI.map(([k,t],i)=>`<div class="lk-row"><span><b class="mono" style="color:var(--gold)">${i+1}.</b> ${t}</span>${likert(k,cvi[k],4,EXP_L4)}<input class="inp exp-note" data-note="${k}" placeholder="สิ่งที่ควรแก้ไข" value="${esc(note[k]||'')}" ${cvi[k]&&cvi[k]<=2?'':'hidden'}></div>`).join('')}</div>
    <div class="exp-sec"><h3>ส่วนที่ 2 · ความสะดวกในการใช้งาน (System Usability Scale)</h3><div class="muted" style="font-size:12.5px">1 = ${EXP_L5[0]} · 3 = ${EXP_L5[2]} · 5 = ${EXP_L5[4]}</div>
@@ -4651,15 +4721,16 @@ function expForm(){
     <label class="fld">จุดเด่นของเกม<textarea class="inp" id="exSt" rows="2" maxlength="1500">${esc(prev.strengths||'')}</textarea></label>
     <label class="fld">สิ่งที่ควรปรับปรุง (เรียงตามความสำคัญ)<textarea class="inp" id="exIm" rows="3" maxlength="2000">${esc(prev.improve||'')}</textarea></label>
     <label class="fld">ข้อเสนอแนะอื่น ๆ<textarea class="inp" id="exOt" rows="2" maxlength="1500">${esc(prev.other||'')}</textarea></label></div>
-   <div class="flex"><span class="muted" id="exLeft" style="font-size:12.5px"></span><button class="btn gold right-al" id="exSend">ส่งแบบประเมิน</button></div>`); $('#mbox').classList.add('wide');
+   <div class="flex exp-formfoot"><span class="muted" id="exLeft" style="font-size:12.5px"></span><button class="btn ghost sm right-al" id="exLater">บันทึกไว้ ทำต่อภายหลัง</button><button class="btn gold" id="exSend">ส่งแบบประเมิน</button></div>`); $('#mbox').classList.add('wide');
   const box=$('#mbox'), st={}; Object.assign(st,cvi,sus,{overall});
   const left=()=>{ const m=EXP_CVI.filter(([k])=>!st[k]).length+EXP_SUS.filter((_,i)=>!st['s'+i]).length+(st.overall?0:1)+(rec?0:1); $('#exLeft').textContent=m?`เหลืออีก ${m} ข้อ`:'ครบทุกข้อแล้ว'; return m; };
-  const draft=()=>LS.set('ert.expert.draft',collect());
+  const draft=()=>{ const d=collect(); LS.set('ert.expert.draft',d); expDraftPush(d); };
   const collect=()=>({cvi:Object.fromEntries(EXP_CVI.map(([k])=>[k,st[k]||null])),sus:EXP_SUS.map((_,i)=>st['s'+i]||null),overall:st.overall||null,rec,
     note:Object.fromEntries(xqa('.exp-note',box).map(i=>[i.dataset.note,i.value.trim()]).filter(x=>x[1])),strengths:$('#exSt').value.trim(),improve:$('#exIm').value.trim(),other:$('#exOt').value.trim()});
   wireLikert(box,st,k=>{ const n=xq(`.exp-note[data-note="${k}"]`,box); if(n) n.hidden=!(st[k]<=2); left(); draft(); });
   xqa('[data-rec]',box).forEach(b=>b.onclick=()=>{ rec=b.dataset.rec; xqa('[data-rec]',box).forEach(x=>x.setAttribute('aria-pressed',x===b)); left(); draft(); });
   xqa('textarea,.exp-note',box).forEach(t=>t.oninput=draft); left();
+  $('#exLater').onclick=()=>{ const d=collect(); LS.set('ert.expert.draft',d); clearTimeout(expDraftT); expSave('draft',{expertId:EXP.me.expertId,ts:new Date().toISOString(),me:EXP.me,draft:d}).catch(()=>{}); closeModal(); expBar(); toast('บันทึกฉบับร่างแล้ว กลับมาทำต่อได้จากปุ่ม EXPERT','ok'); };
   $('#exSend').onclick=async()=>{ const m=left(); if(m){ toast(`ยังเหลือ ${m} ข้อ`,'bad'); const first=xqa('[data-lk]',box).find(g=>!st[g.dataset.lk]); first&&first.scrollIntoView({block:'center',behavior:'smooth'}); return; }
     const d=collect(); const e=Object.assign({id:'XF'+Date.now().toString(36),ts:new Date().toISOString()},EXP.me,d,{susScore:XS.sus(d.sus),nCases:Object.keys(EXP.cases()).length});
     $('#exSend').disabled=true; try{ const where=await expSave('form',e); try{ localStorage.removeItem('ert.expert.draft'); }catch(z){}; closeModal(); expBar();
@@ -4685,7 +4756,7 @@ async function expDashCard(){ const host=$('#fbCard')||$('#orgCard')||$('#dashBo
      <div class="kpi"><b>${f2(R.sus.mean,1)}</b><span>SUS ${R.sus.n?`± ${f2(R.sus.sd,1)} · ${XS.susLab(R.sus.mean)}`:''}</span></div>
      <div class="kpi"><b>${f2(R.overall.mean,2)}</b><span>คุณภาพโดยรวม /5 ${R.overall.n>1?'± '+f2(R.overall.sd,2):''}</span></div>
      <div class="kpi"><b>${cases.length}</b><span>การประเมินรายเคส · ${R.caseRaters} คน · ${R.cases.length} เคส</span></div></div>
-   <div class="muted" style="font-size:12px">ผู้เชี่ยวชาญ: ${Object.entries(R.prof).map(([k,n])=>`${esc(k)} ${n}`).join(' · ')||'—'} · ข้อเสนอการนำไปใช้: ${EXP_REC.filter(([k])=>R.rec[k]).map(([k,l])=>`${l} ${R.rec[k]}`).join(' · ')||'—'}</div>
+   <div class="muted" style="font-size:12px">ผู้เชี่ยวชาญ: ${Object.entries(R.prof).map(([k,n])=>`${esc(k)} ${n}`).join(' · ')||'—'}<br>หน่วยงาน: ${Object.entries(R.dept).map(([k,n])=>`${esc(k)} ${n}`).join(' · ')||'—'} · ข้อเสนอการนำไปใช้: ${EXP_REC.filter(([k])=>R.rec[k]).map(([k,l])=>`${l} ${R.rec[k]}`).join(' · ')||'—'}</div>
    ${R.N?`<div class="tbl-wrap"><table class="tbl exp-tbl"><thead><tr><th>ข้อ</th><th>องค์ประกอบ</th><th>n</th><th>Mean</th><th>SD</th><th>Mdn</th><th>I-CVI</th><th>k*</th><th>ผล</th></tr></thead><tbody>
      ${R.items.map((i,x)=>`<tr><td class="mono">${x+1}</td><td>${esc(i.t)}</td><td class="mono">${i.n}</td><td class="mono">${f2(i.mean)}</td><td class="mono">${f2(i.sd)}</td><td class="mono">${f2(i.median,1)}</td><td class="mono" style="color:${col(i.icvi)}">${f2(i.icvi)}</td><td class="mono">${f2(i.kappa)}</td><td>${i.icvi==null?'—':i.pass?'<span style="color:var(--ok)">ผ่าน</span>':'<span style="color:var(--red)">ควรปรับ</span>'} <span class="muted" style="font-size:11.5px">${XS.kLab(i.kappa)}</span></td></tr>`).join('')}</tbody></table></div>
      <div class="muted" style="font-size:11.5px">I-CVI = สัดส่วนผู้เชี่ยวชาญที่ให้ 3–4 · เกณฑ์ผ่าน ${R.N<=5?'1.00 เมื่อมีผู้เชี่ยวชาญ 3–5 คน (Lynn, 1986)':'≥ 0.78 เมื่อมีผู้เชี่ยวชาญ ≥ 6 คน (Polit & Beck, 2006)'} · k* = modified kappa ปรับโอกาสตกลงกันโดยบังเอิญ (> 0.74 ดีเยี่ยม · 0.60–0.74 ดี · 0.40–0.59 พอใช้)</div>`:''}
@@ -4696,10 +4767,10 @@ async function expDashCard(){ const host=$('#fbCard')||$('#orgCard')||$('#dashBo
      ${f.strengths?`<div style="font-size:13px"><b style="color:var(--teal)">จุดเด่น</b> ${esc(f.strengths)}</div>`:''}${f.improve?`<div style="font-size:13px;white-space:pre-wrap"><b style="color:var(--gold)">ควรปรับปรุง</b> ${esc(f.improve)}</div>`:''}
      ${Object.entries(f.note||{}).map(([k,t])=>`<div style="font-size:12.5px"><span class="mono" style="color:var(--red)">${k}</span> ${esc(t)}</div>`).join('')}${f.other?`<div style="font-size:13px" class="muted">${esc(f.other)}</div>`:''}</div>`).join('')}</div>`:''}`}`;
   const q=v=>`"${String(v??'').replace(/"/g,'""')}"`, day=new Date().toISOString().slice(0,10), csv=(rows)=>'﻿'+rows.map(r=>r.map(q).join(',')).join('\n');
-  $('#exCsv1')&&($('#exCsv1').onclick=()=>offerFile(`ERT3458_expert_forms_${day}.csv`,csv([['expertId','time','name','profession','specialty','org','years',...EXP_CVI.map(x=>x[0]),...EXP_SUS.map((_,i)=>'SUS'+(i+1)),'SUS_score','overall','recommend','n_cases','strengths','improve','other','item_notes'],
-    ...forms.map(f=>[f.expertId,f.ts,f.name,f.prof,f.spec,f.org,f.years,...EXP_CVI.map(([k])=>f.cvi?.[k]),...(f.sus||[]),f.susScore,f.overall,(EXP_REC.find(r=>r[0]===f.rec)||['',''])[1],f.nCases,f.strengths,f.improve,f.other,Object.entries(f.note||{}).map(([k,t])=>k+': '+t).join(' | ')])]),'text/csv'));
-  $('#exCsv2')&&($('#exCsv2').onclick=()=>offerFile(`ERT3458_expert_cases_${day}.csv`,csv([['expertId','time','name','profession','caseId','title','tool','level','game_score',...EXP_CASE.map(x=>x[0]),'mean','comment'],
-    ...cases.map(r=>[r.expertId,r.ts,r.name,r.prof,r.caseId,r.title,r.tool,r.level,r.score,...EXP_CASE.map(([k])=>r[k]),f2(XS.mean(EXP_CASE.map(([k])=>+r[k]).filter(Boolean))),r.comment])]),'text/csv'));
+  $('#exCsv1')&&($('#exCsv1').onclick=()=>offerFile(`ERT3458_expert_forms_${day}.csv`,csv([['expertId','time','name','profession','department','specialty','org','years',...EXP_CVI.map(x=>x[0]),...EXP_SUS.map((_,i)=>'SUS'+(i+1)),'SUS_score','overall','recommend','n_cases','strengths','improve','other','item_notes'],
+    ...forms.map(f=>[f.expertId,f.ts,f.name,f.prof,f.deptLabel||f.dept,f.spec,f.org,f.years,...EXP_CVI.map(([k])=>f.cvi?.[k]),...(f.sus||[]),f.susScore,f.overall,(EXP_REC.find(r=>r[0]===f.rec)||['',''])[1],f.nCases,f.strengths,f.improve,f.other,Object.entries(f.note||{}).map(([k,t])=>k+': '+t).join(' | ')])]),'text/csv'));
+  $('#exCsv2')&&($('#exCsv2').onclick=()=>offerFile(`ERT3458_expert_cases_${day}.csv`,csv([['expertId','time','name','profession','department','caseId','title','tool','level','game_score',...EXP_CASE.map(x=>x[0]),'mean','comment'],
+    ...cases.map(r=>[r.expertId,r.ts,r.name,r.prof,r.dept,r.caseId,r.title,r.tool,r.level,r.score,...EXP_CASE.map(([k])=>r[k]),f2(XS.mean(EXP_CASE.map(([k])=>+r[k]).filter(Boolean))),r.comment])]),'text/csv'));
   $('#exCsv3')&&($('#exCsv3').onclick=()=>offerFile(`ERT3458_expert_stats_${day}.csv`,csv([['section','item','description','n','mean','sd','median','I-CVI','modified_kappa','result'],
     ...R.items.map(i=>['CVI',i.k,i.t,i.n,f2(i.mean),f2(i.sd),f2(i.median,1),f2(i.icvi),f2(i.kappa),i.icvi==null?'':i.pass?'pass':'revise']),
     ['CVI','S-CVI/Ave','',R.N,'','','',f2(R.scviAve),'',''],['CVI','S-CVI/UA','',R.N,'','','',f2(R.scviUA),'',''],
@@ -4734,13 +4805,15 @@ EXP.load(); setTimeout(()=>{ expBar(); if(/[?&#]expert\b/.test(location.search+l
  .exp-case.done{border-color:var(--ok);color:var(--ok)}
  #expCard{margin-bottom:12px;display:grid;gap:10px}
  .exp-tbl{font-size:12.5px}.exp-tbl td,.exp-tbl th{padding:6px 8px;vertical-align:top}
- .tbl-wrap{overflow-x:auto}.exp-tbl{width:100%;border-collapse:collapse}.exp-tbl th{text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid rgba(255,255,255,.12)}.exp-tbl td{border-bottom:1px solid rgba(255,255,255,.06)}`; document.head.appendChild(st); })();
+ .tbl-wrap{overflow-x:auto}
+ .exp-code{display:grid;gap:2px;padding:10px 14px;border-radius:12px;border:1px dashed var(--gold);background:rgba(231,181,76,.08)}.exp-code span{font-size:12px;color:var(--muted)}.exp-code b{font-size:20px;color:var(--gold);letter-spacing:.08em}.exp-code small{font-size:11.5px;color:var(--muted)}
+ .exp-formfoot{position:sticky;bottom:-1px;background:rgba(11,26,46,.95);padding:10px 0;gap:8px}.exp-tbl{width:100%;border-collapse:collapse}.exp-tbl th{text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid rgba(255,255,255,.12)}.exp-tbl td{border-bottom:1px solid rgba(255,255,255,.06)}`; document.head.appendChild(st); })();
 /* ================================================================
    HOW-TO-PLAY GUIDE — shown before the first game (players) and after expert registration (experts).
    Re-open any time from the 📖 button (top bar) or the title screen link. In-game it opens as a modal.
    ================================================================ */
 const GUIDE_STEPS=[
- ['brief','รับเวร','อ่านข้อมูลผู้ป่วยจากการส่งเวร: อายุ การวินิจฉัย ประวัติ และสิ่งที่ต้องเฝ้าระวัง'],
+ ['brief','รับเวร · รอบที่ 1','อ่านข้อมูลผู้ป่วย รอบแรกอาการยังไม่มาก: วัดและให้คะแนน EWS เลือกการพยาบาลตามอาการและ protocol · 2 ชั่วโมงต่อมาผู้ป่วยอาการเปลี่ยนไป'],
  ['tool','เลือก EWS','เลือกเครื่องมือให้ตรงกลุ่มผู้ป่วย: MEWS ≥ 15 ปี · PEWS > 28 วัน – < 15 ปี · NEWS ≤ 28 วัน · MEOWS ครรภ์ ≥ 20 สัปดาห์'],
  ['measure','วัด & ให้คะแนน','เลือกอุปกรณ์วัดสัญญาณชีพ แล้วให้คะแนนทีละพารามิเตอร์ ระบบรวมคะแนนจากที่คุณให้'],
  ['first','ช่วยเหลือทันที','ช่วยผู้ป่วยก่อนแจ้งทีม เช่น จัดท่า ให้ออกซิเจน (เปลี่ยนหรือเพิ่มชนิดได้) เรียกพยาบาลมาช่วย · ถ้าช้าหรือไม่ช่วย ผู้ป่วยจะทรุดลง'],
@@ -4748,8 +4821,8 @@ const GUIDE_STEPS=[
  ['tier','Protocol','เลือกแนวปฏิบัติตามช่วงคะแนนรวม EWS ของผู้ป่วย'],
  ['decision','ตัดสินใจ','ตัดสินว่าต้องตามทีม ERT หรือไม่ ตามคะแนนและ critical criteria ในนโยบาย'],
  ['phone','ประกาศ','กดหมายเลข 3458 และประกาศตามรูปแบบ: กลุ่มทีม สถานที่ ห้อง (กด 6 เมื่อสงสัย stroke)'],
- ['care','ดูแลเบื้องต้น','ระหว่างรอทีม เลือกการพยาบาลจากถาดตามหมวด เปิด Emergency cart และช่วยแพทย์ เช่น ใส่ท่อช่วยหายใจ · pacing · cardioversion ด้วย ZOLL'],
- ['handover','ส่งต่อ ERT','ส่งข้อมูลให้ทีมแบบ SBAR: สถานการณ์ ภูมิหลัง การประเมิน และข้อเสนอ'],
+ ['care','ดูแลเบื้องต้น','ระหว่างรอทีม กดแถบหมวดการพยาบาล (ประเมิน · Airway · จัดท่า · Circulation ฯลฯ) เพื่อเปิดข้อย่อย มีทั้งข้อที่เหมาะ ไม่จำเป็น และไม่ควรทำ เปิด Emergency cart และช่วยแพทย์ เช่น ใส่ท่อช่วยหายใจ · pacing · cardioversion ด้วย ZOLL'],
+ ['handover','ส่งต่อ ERT','เลือกข้อความที่ถูกต้องที่สุดในแต่ละหัวข้อ S · B · A · R (มีตัวเลือกที่ใช้ค่าเก่า คะแนนผิด หรือคลุมเครือ) และระบุการพยาบาลที่ทำจริง'],
  ['result','สรุปเคส','ดูคะแนนรายด้าน เฉลย และสิ่งที่ควรพัฒนา']];
 const GUIDE_LEVELS=[
  ['1','ฝึกหัด · Guided','มีตาราง EWS บนจอและคำใบ้ทุกขั้นตอน ไม่จับเวลา เหมาะกับการเริ่มต้น'],
@@ -4761,9 +4834,9 @@ function guideHTML(tab){
   const ex=tab==='expert';
   const tabs=`<div class="gd-tabs" role="tablist"><button role="tab" data-gt="player" aria-selected="${!ex}">🎮 สำหรับผู้เล่น</button><button role="tab" data-gt="expert" aria-selected="${ex}">🎓 สำหรับผู้เชี่ยวชาญ</button></div>`;
   if(!ex) return tabs+`
-   <div class="gd-hero"><div><div class="eyebrow">วิธีเล่น · ERT 3458 Ward Sim</div><h2>เห็นสัญญาณก่อน ตามทีมทัน</h2>
+   <div class="gd-hero"><div><div class="eyebrow">วิธีเล่น · SENTINEL</div><h2>Recognize early. Respond fast.</h2><div style="font-weight:600;margin:-2px 0 6px">เห็นสัญญาณก่อน ตามทีมทัน · ERT 3458</div>
     <p>คุณเป็นพยาบาลประจำหอผู้ป่วย ในแต่ละเคสต้องประเมิน Early Warning Score ให้ถูกเครื่องมือ ช่วยเหลือผู้ป่วยทันที และตัดสินใจเรียกทีม ERT 3458 ให้ทันเวลา ตามนโยบาย W/P-02.1-BHQ-013 Rev.07</p></div>
-    <div class="gd-time"><b>5–8</b><span>นาที / เคส</span></div></div>
+    <div class="gd-time"><b>10–15</b><span>นาที / เคส</span></div></div>
    <h3 class="gd-h">ขั้นตอนในแต่ละเคส</h3>
    <ol class="gd-steps">${GUIDE_STEPS.map(([k,t,d],i)=>`<li class="${k==='first'||k==='care'?'hl':''}"><span class="gd-n">${i+1}</span><div><b>${t}</b><p>${d}</p></div></li>`).join('')}</ol>
    <p class="gd-note">ถ้าผู้ป่วย<b>ไม่เข้าเกณฑ์</b>ตามทีม ขั้นที่ 8–10 จะเปลี่ยนเป็น “แผนการพยาบาล” และ “รายงานแพทย์แบบ SBAR”</p>
@@ -4865,6 +4938,473 @@ const guideHidden=tab=>!!LS.get('ert.guide.hide.'+tab,false);
  .gd-lv b{font-size:14px}.gd-lv p{margin:0;font-size:12.5px;line-height:1.5;color:#c4d2e1}
  .gd-foot{position:sticky;bottom:0;display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 14px;border-radius:14px;background:rgba(11,26,46,.92);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(8px)}
  .gd-skip{font-size:13px;display:flex;gap:6px;align-items:center;color:var(--muted)}`; document.head.appendChild(st); })();
+/* ================================================================
+   MOBILE & TABLET — iOS · Android · iPad
+   Phones/tablets in portrait (≤ 820 px): compact vital-sign strip under the top bar, question panel as a
+   bottom sheet that can be collapsed to see the room, and during care phases a tab switch between
+   "โจทย์" (question) and "การพยาบาล" (actions) sharing the same sheet.
+   Phones in landscape (height ≤ 500 px): side-by-side panels like the desktop, scaled down.
+   Also: touch tuning, iOS audio/speech unlock, lighter 3D rendering on touch devices.
+   ================================================================ */
+const MOB={ portrait:()=>matchMedia('(max-width:820px)').matches&&!matchMedia('(max-height:500px) and (orientation:landscape)').matches };
+// in-game flag for compact top bar
+{ const _s=show; show=function(id){ _s(id); document.body.classList.toggle('ingame',id==='scr-game'); mobSheet(); }; }
+// bottom-sheet tabs during care phases (portrait)
+function mobSheet(){
+  let seg=$('#sheetSeg');
+  if(!seg){ seg=document.createElement('div'); seg.id='sheetSeg'; seg.innerHTML=`<button data-sh="case" aria-pressed="true">📋 โจทย์</button><button data-sh="act" aria-pressed="false">🧰 การพยาบาล</button><button data-sh="min" class="sh-min" aria-label="ย่อ/ขยายแผง" title="ย่อ/ขยายแผงเพื่อดูห้องผู้ป่วย">▾</button>`;
+    $('#scr-game').appendChild(seg);
+    seg.querySelectorAll('[data-sh]').forEach(b=>b.onclick=()=>{ const k=b.dataset.sh;
+      if(k==='min'){ document.body.classList.toggle('sheetMin'); b.textContent=document.body.classList.contains('sheetMin')?'▴':'▾'; setTimeout(()=>{ try{ centreView(); }catch(e){} },260); return; }
+      document.body.classList.remove('sheetMin'); seg.querySelector('.sh-min').textContent='▾';
+      document.body.classList.toggle('sheetAct',k==='act'); seg.querySelectorAll('[data-sh=case],[data-sh=act]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.sh===k)); }); }
+  const acting=document.body.classList.contains('acting');
+  seg.classList.toggle('two',acting);
+  if(!acting){ document.body.classList.remove('sheetAct'); seg.querySelectorAll('[data-sh=case],[data-sh=act]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.sh==='case')); }
+}
+// when the action panel appears in a care phase on a phone, open the actions tab first
+{ let was=false; new MutationObserver(()=>{ const ap=$('#actionPanel'); const now=!!ap&&!ap.hidden;
+    setTimeout(()=>{ mobSheet(); if(now&&!was&&MOB.portrait()){ document.body.classList.add('sheetAct'); $$('#sheetSeg [data-sh=case],#sheetSeg [data-sh=act]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.sh==='act')); } was=now; },0); })
+    .observe($('#actionPanel'),{attributes:true,attributeFilter:['hidden']}); }
+// count of actions done shown on the tab
+setInterval(()=>{ const b=$('#sheetSeg [data-sh=act]'); if(!b||typeof C==='undefined'||!C) return; const n=C.done?C.done.size:0; const t='🧰 การพยาบาล'+(n?` · ${n}`:''); if(b.textContent!==t) b.textContent=t; },700);
+
+// phones: fold guide / feedback / sound into a "⋯" menu during the game so the top bar fits
+{ const m=document.createElement('button'); m.className='iconbtn'; m.id='btnMore'; m.title='เมนู'; m.setAttribute('aria-label','เมนูเพิ่มเติม'); m.textContent='⋯'; $('#btnHome').before(m);
+  m.onclick=()=>{ const it=[['btnRef','📋 ตาราง EWS'],['btnGuide','📖 วิธีเล่น'],['btnFb','💬 ส่งความคิดเห็น'],['btnSound','🔈 เปิด/ปิดเสียง'],['expBar','🎓 EXPERT · ความคืบหน้า']].filter(([id])=>{ const e=$('#'+id); return e&&!e.hidden; });
+    modal(`<div class="mhead"><div><div class="eyebrow">เมนู</div></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div><div style="display:grid;gap:8px">${it.map(([id,l])=>`<button class="btn" data-more="${id}" style="justify-content:flex-start;min-height:48px">${l}</button>`).join('')}</div>`);
+    $$('#mbox [data-more]').forEach(b=>b.onclick=()=>{ closeModal(); setTimeout(()=>$('#'+b.dataset.more).click(),50); }); }; }
+
+// a new phase brings the sheet back up
+{ let ph=null; const _r=render; render=function(){ const r=_r.apply(this,arguments); if(C&&C.phase!==ph){ ph=C.phase; if(document.body.classList.contains('sheetMin')){ document.body.classList.remove('sheetMin'); const m=$('#sheetSeg .sh-min'); if(m) m.textContent='▾'; } } return r; }; }
+
+// touch devices: lighter rendering, audio + speech unlock on first touch (iOS)
+const IS_TOUCH=matchMedia('(pointer:coarse)').matches||'ontouchstart' in window;
+if(IS_TOUCH){ document.body.classList.add('touch');
+  const cap=()=>{ try{ if(W3&&W3.r){ W3.r.setPixelRatio(Math.min(devicePixelRatio,innerWidth<700?1.5:1.35)); } }catch(e){} }; setTimeout(cap,1500); addEventListener('orientationchange',()=>setTimeout(cap,400));
+  const unlock=()=>{ try{ const a=ac(); a&&a.state==='suspended'&&a.resume(); }catch(e){} try{ if(window.speechSynthesis){ const u=new SpeechSynthesisUtterance(' '); u.volume=0; speechSynthesis.speak(u); } }catch(e){} removeEventListener('touchend',unlock,true); };
+  addEventListener('touchend',unlock,true); }
+// keep the 3D canvas sized to the visible viewport (iOS toolbars, rotation)
+addEventListener('orientationchange',()=>setTimeout(()=>dispatchEvent(new Event('resize')),350));
+
+(()=>{ const st=document.createElement('style'); st.textContent=`
+ html,body{overscroll-behavior:none}
+ button,a,.choice,.act,.lk-b,.exp-case,.ct,.lvc{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+ body.touch .iconbtn{width:40px;height:40px}
+ #sheetSeg{display:none}
+ #btnMore{display:none;font-size:20px;line-height:1}
+ #actionPanel>*{flex-shrink:0;min-height:auto}
+ @media (max-width:820px){
+  .inp,select.inp,textarea.inp,input{font-size:16px}
+  #topbar{padding-top:max(8px,env(safe-area-inset-top,0px))}
+  body.ingame .brand .brand-name,body.ingame .beta-tag{display:none}
+  body.ingame #chipCase{display:none}
+  #topbar{gap:5px!important}
+  body.touch .iconbtn{width:36px;height:36px}
+  /* compact vitals strip under the top bar */
+  #vitHud{top:calc(54px + env(safe-area-inset-top,0px));bottom:auto!important;left:6px!important;right:6px;transform:none!important;min-width:0!important;max-width:none!important;padding:4px 5px;border-radius:10px}
+  #vitHud .vh-head{display:none}
+  .vh-row{grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:3px!important}
+  .vh{padding:3px 4px 4px;border-radius:7px}
+  .vh .vl{font-size:9.5px;letter-spacing:.02em}
+  .vh .vv{font-size:15px!important}.vh[data-k=bp] .vv{font-size:12.5px!important}
+  .vh .vu{display:none}.vh .va{font-size:9.5px;top:2px;right:3px}
+  /* bottom sheet */
+  #casePanel{left:6px!important;right:6px!important;width:auto!important;top:auto!important;bottom:calc(42px + env(safe-area-inset-bottom,0px))!important;height:52%!important;transition:height .25s}
+  body.sheetMin #casePanel{height:118px!important}
+  body.sheetMin #casePanel #cpBody{display:none}
+  #sheetSeg{position:absolute;z-index:31;left:10px;right:10px;bottom:calc(52% + 48px + env(safe-area-inset-bottom,0px));display:flex;gap:6px;justify-content:flex-end;pointer-events:none;transition:bottom .25s}
+  body.ingame #sheetSeg{display:flex}
+  body.sheetMin #sheetSeg{bottom:calc(118px + 48px + env(safe-area-inset-bottom,0px))}
+  #sheetSeg button{pointer-events:auto;font:600 13.5px inherit;font-family:inherit;padding:7px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.18);background:rgba(11,26,46,.92);color:#dfe9f3;backdrop-filter:blur(8px)}
+  #sheetSeg button[aria-pressed="true"]{background:var(--teal);color:#06202b;border-color:var(--teal)}
+  #sheetSeg:not(.two) [data-sh=case],#sheetSeg:not(.two) [data-sh=act]{display:none}
+  #sheetSeg.two{justify-content:flex-start}#sheetSeg .sh-min{margin-left:auto;padding:7px 12px}
+  /* care phases: actions share the sheet */
+  #actionPanel{left:6px!important;right:6px!important;width:auto!important;top:auto!important;bottom:calc(42px + env(safe-area-inset-bottom,0px))!important;height:52%;max-height:none!important;grid-template-columns:1fr!important;z-index:30;display:block!important}
+  #actionPanel>*{margin-bottom:8px}#actionPanel>.act,#actionPanel>button{width:100%}
+  body.acting:not(.sheetAct) #actionPanel{visibility:hidden;pointer-events:none}
+  body.acting.sheetAct #casePanel{visibility:hidden;pointer-events:none}
+  body.sheetMin #actionPanel{height:118px}
+  #actionPanel .tray-tabs{display:flex!important;flex-wrap:wrap;overflow:visible;gap:6px;min-height:max-content}
+  #actionPanel .tray-tabs>*{flex:none;height:auto!important;font-size:13px;padding:7px 12px}
+  #actionPanel .act{min-height:48px}
+  .fxcap{left:8px!important;right:8px!important;transform:none!important;top:calc(108px + env(safe-area-inset-top,0px))!important;bottom:auto!important;width:auto!important}
+  /* modals: full-screen sheets */
+  #modal{padding:6px!important}
+  #mbox{width:100%!important;max-width:none!important;max-height:calc(100dvh - 20px)!important;padding:14px!important;border-radius:16px!important}
+  #mbox.wide{width:100%!important}
+  .zl-card{max-width:100%;overflow:hidden}
+  .gd-steps{grid-template-columns:1fr!important}
+ }
+ @media (max-width:520px){
+  body.ingame #btnRef,body.ingame #btnGuide,body.ingame #btnFb,body.ingame #btnSound,body.ingame #expBar{display:none!important}
+  body.ingame #btnMore{display:grid}
+  .brand .tag{font-size:11px;padding:2px 5px}
+ }
+ /* tablets in portrait: a bit roomier */
+ @media (min-width:600px) and (max-width:820px){
+  .vh .vv{font-size:20px!important}.vh[data-k=bp] .vv{font-size:16px!important}.vh .vl{font-size:11px}
+  #casePanel,#actionPanel{height:46%!important}
+  #sheetSeg{bottom:calc(46% + 48px)}
+  body.sheetMin #casePanel,body.sheetMin #actionPanel{height:118px!important}
+  body.sheetMin #sheetSeg{bottom:calc(118px + 48px)}
+ }
+ /* phones in landscape */
+ @media (max-height:500px) and (orientation:landscape){
+  #topbar{padding-top:4px;padding-bottom:4px}
+  body.ingame .brand .brand-name,body.ingame .beta-tag,body.ingame #chipCase,body.ingame #chipPlayer{display:none}
+  #casePanel{top:48px!important;bottom:34px!important;left:max(6px,env(safe-area-inset-left,0px))!important;width:42vw!important;height:auto!important;right:auto!important}
+  #actionPanel{top:48px!important;bottom:34px!important;right:max(6px,env(safe-area-inset-right,0px))!important;width:30vw!important;left:auto!important;height:auto!important;max-height:none!important;grid-template-columns:1fr!important}
+  #vitHud{top:48px;bottom:auto!important;left:calc(42vw + 12px)!important;right:6px;transform:none!important;min-width:0!important;max-width:none!important;padding:4px}
+  body.acting #vitHud{right:calc(30vw + 12px)}
+  #vitHud .vh-head{display:none}.vh-row{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:3px!important}
+  .vh{padding:2px 5px}.vh .vv{font-size:15px!important}.vh[data-k=bp] .vv{font-size:13px!important}.vh .vu{display:none}.vh .vl{font-size:9.5px}
+  #actionPanel .tray-tabs{display:flex!important;flex-wrap:wrap;gap:4px}#actionPanel .tray-tabs>*{height:auto!important}
+  #stepRail{transform:scale(.85);transform-origin:bottom left}
+  #mbox{max-height:calc(100dvh - 12px)!important}
+  .title-wrap{grid-template-columns:1fr 1fr!important}
+ }`; document.head.appendChild(st); })();
+/* ================================================================
+   TWO-STAGE CASES + HARDER HANDOVER
+   1) Every case starts with an earlier round (รอบที่ 1): the patient is only mildly abnormal (EWS 1–3, no
+      call criteria). The learner scores EWS, chooses early nursing care, and sets the protocol/frequency.
+      Two hours later the patient deteriorates into the main scenario.
+   2) Handover/SBAR: no S/B/A/R labels on the answers — one best statement per section among plausible
+      distractors (outdated values, wrong score, vague or irrelevant information), plus what was done.
+   ================================================================ */
+const PRE_BASE=p=>{ const pop=critPop(p);
+  if(pop==='neo') return {rr:46,spo2:97,hr:140,sbp:66,dbp:40,temp:36.9};
+  if(pop==='peds'){ const y=p.ageYears; return y<1?{rr:34,spo2:98,hr:130,sbp:86,dbp:52,temp:37.0}:y<6?{rr:26,spo2:98,hr:112,sbp:96,dbp:58,temp:37.0}:y<12?{rr:20,spo2:98,hr:94,sbp:104,dbp:64,temp:37.0}:{rr:18,spo2:98,hr:86,sbp:112,dbp:70,temp:37.0}; }
+  return {rr:18,spo2:98,hr:82,sbp:122,dbp:76,temp:37.0}; };
+const PRE_CUE={resp:'บอกว่าเหนื่อยขึ้นเล็กน้อยเวลาลุกนั่ง ไอมีเสมหะ',neuro:'บ่นปวดศีรษะเล็กน้อย ญาติบอกว่าตอบช้ากว่าเมื่อเช้านิดหน่อย',cardio:'บอกว่าใจสั่นเป็นพัก ๆ แน่นหน้าอกเล็กน้อยแล้วหายเอง',
+  shock:'ดูอ่อนเพลีย ดื่มน้ำได้น้อย ปัสสาวะออกน้อยกว่าปกติเล็กน้อย',ob:'บอกว่ารู้สึกไม่สบายตัว ปวดศีรษะเล็กน้อย',neo:'ดูดนมได้น้อยลงกว่ามื้อก่อนเล็กน้อย ร้องเบาลง',other:'บอกว่ารู้สึกครั่นเนื้อครั่นตัว ไม่ค่อยสบาย'};
+function genPre(cs){
+  const b=PRE_BASE(cs.p), num=['rr','spo2','hr','sbp','dbp','temp']; let best=null;
+  for(let k=.45;k<=1.001;k+=.05){
+    const v=Object.assign({},cs.v,{o2:false,o2L:0,avpu:'A'});
+    num.forEach(x=>{ if(cs.v[x]==null||b[x]==null) return; let src=cs.v[x]; if(x==='spo2'&&cs.v.o2) src=Math.max(80,src-3); v[x]=x==='temp'?Math.round((src+(b[x]-src)*k)*10)/10:Math.round(src+(b[x]-src)*k); });
+    ['behavior','effort','crt'].forEach(x=>{ if(typeof v[x]==='number') v[x]=k<.7?Math.min(v[x],1):0; });
+    if(v.spo2>100) v.spo2=100;
+    const r=scoreCase(cs.p,v,cs.tool), met=critMet(cs.p,v,r,{});
+    if(met.size) continue;
+    if(r.total>=1&&r.total<=3){ best={v,total:r.total}; break; }
+    if(!best||r.total<best.total) best={v,total:r.total};
+  }
+  if(!best){ const v=Object.assign({},cs.v,b,{o2:false,o2L:0,avpu:'A'}); best={v,total:0}; }
+  const pop=critPop(cs.p), who=pop==='neo'||pop==='peds'?'ญาติ':'ผู้ป่วย';
+  const cue=PRE_CUE[pop==='neo'?'neo':pop==='ob'?'ob':cs.sys]||PRE_CUE.other;
+  return {auto:true,v:best.v,story:`รอบที่ 1 (2 ชั่วโมงก่อนเหตุการณ์) ${cs.p.name} ${cs.p.dx} · ${who}${cue} ยังพูดคุยรู้เรื่อง ไม่มีภาวะคุกคามชีวิตชัดเจน · ประเมินตามรอบและให้การพยาบาลที่เหมาะสม`}; }
+{ const _sc=startCase; startCase=function(){ const cs=CASES.find(c=>c.id===S.ids[S.idx]);
+    if(cs&&!cs.pre){ cs.pre=genPre(cs); if(!/^2 ชั่วโมงต่อมา/.test(cs.story)) cs.story='2 ชั่วโมงต่อมา · '+cs.story; }
+    return _sc.apply(this,arguments); }; }
+
+/* ---------- round-1 early nursing care ---------- */
+const EARLY=[
+ ['focus','ประเมินซ้ำเฉพาะระบบที่เกี่ยวข้อง (ฟังปอด / ระบบประสาท / การไหลเวียน)',c=>'req','คะแนนเริ่มผิดปกติ ต้องหาสาเหตุด้วยการประเมินระบบที่เกี่ยวข้อง'],
+ ['chart','บันทึกค่าและแนวโน้มสัญญาณชีพใน flow sheet',c=>'req','แนวโน้มที่บันทึกต่อเนื่องช่วยให้เห็นการทรุดลงได้เร็ว'],
+ ['inchg','รายงานหัวหน้าเวร (in-charge) ถึงแนวโน้มที่เปลี่ยนไป',c=>c.total>=1?'req':'ok','EWS ≥ 1 ตามแนวปฏิบัติควรแจ้ง in-charge และติดตามใกล้ชิด'],
+ ['educate','แนะนำผู้ป่วย/ญาติให้กดกริ่งทันทีเมื่อเหนื่อยขึ้น สับสน หรือมีอาการผิดปกติ',c=>'rec','ผู้ป่วยและญาติช่วยเฝ้าระวังและแจ้งอาการเปลี่ยนแปลงได้เร็ว'],
+ ['position','จัดท่าศีรษะสูง 30–45°',c=>['resp','cardio','neuro'].includes(c.sys)?'rec':'ok','ช่วยการหายใจและลดความดันในกะโหลกศีรษะ'],
+ ['cool','เช็ดตัวลดไข้ และให้ยาลดไข้ตามแผนการรักษา',c=>c.fever?'rec':'bad',c=>c.fever?'มีไข้ ลดการใช้ออกซิเจนของร่างกาย':'ไม่มีไข้ ไม่จำเป็นต้องให้ยาลดไข้'],
+ ['io','ติดตามสารน้ำเข้า–ออก (I/O) และกระตุ้นดื่มน้ำถ้าไม่มีข้อห้าม',c=>['shock','other','ob'].includes(c.sys)||c.fever?'rec':'ok','ช่วยประเมินภาวะขาดน้ำและการทำงานของไต'],
+ ['dtx','ตรวจน้ำตาลปลายนิ้ว (DTX)',c=>c.sys==='neuro'||c.pop==='neo'?'rec':'ok','ภาวะน้ำตาลต่ำ/สูงทำให้ซึมหรือสับสนได้'],
+ ['o2','ให้ออกซิเจน cannula 3 L/min',c=>c.spo2<94?'rec':'bad',c=>c.spo2<94?'SpO₂ ต่ำกว่าเป้าหมาย':'SpO₂ ยังปกติ ยังไม่จำเป็นต้องให้ออกซิเจน'],
+ ['md','รายงานแพทย์เจ้าของไข้เพื่อขอแผนการรักษาเพิ่มเติม',c=>c.total>=3?'rec':'ok','คะแนนสูงขึ้นหลายข้อ ควรให้แพทย์ทราบแนวโน้ม'],
+ ['ert','ประกาศ ERT 3458 ทันที',c=>'bad','ยังไม่เข้าเกณฑ์ตามทีม ควรติดตามใกล้ชิดและแจ้ง in-charge ก่อน'],
+ ['sedate','ให้ยานอนหลับเพื่อให้ผู้ป่วยได้พักผ่อน',c=>'bad','ยานอนหลับบดบังอาการซึม/สับสนซึ่งเป็นสัญญาณของการทรุดลง'],
+ ['wait','ไม่ต้องทำอะไรเพิ่ม วัดสัญญาณชีพตามรอบปกติทุก 4 ชั่วโมง',c=>'bad','คะแนนเริ่มผิดปกติ ต้องเพิ่มความถี่การติดตามตาม protocol'],
+ ['flat','จัดให้นอนราบเพื่อพักผ่อน',c=>['resp','cardio'].includes(c.sys)?'bad':'ok','ผู้ป่วยที่มีปัญหาการหายใจ/หัวใจ นอนราบทำให้หายใจลำบากขึ้น'],
+ ['npo','งดน้ำงดอาหารทั้งหมดเองโดยไม่มีคำสั่งแพทย์',c=>'bad','การงดน้ำงดอาหารต้องมีข้อบ่งชี้และคำสั่งแพทย์'],
+ ['walk','พาผู้ป่วยลุกเดินไปห้องน้ำเพื่อให้กระปรี้กระเปร่า',c=>c.pop==='neo'?'ok':'bad','อาการเริ่มเปลี่ยนแปลง เสี่ยงหน้ามืดพลัดตกหกล้ม'],
+];
+function earlyCtx(){ const cs=C.cs, v=cs.pre.v; return {sys:cs.sys||'other',pop:critPop(cs.p),fever:v.temp>=38,spo2:v.spo2,total:C.preTruth.total}; }
+function earlyOpts(){ const c=earlyCtx(), pop=c.pop;
+  return EARLY.filter(([k])=>!(pop==='neo'&&['walk','flat','sedate','cool'].includes(k))).map(([k,t,f,w])=>({k,t:pop==='neo'?t.replace('ผู้ป่วย/ญาติ','มารดา/ญาติ'):t,kind:f(c),why:typeof w==='function'?w(c):w})); }
+function rEarly(){
+  const cs=C.cs; C.early=C.early||{sel:new Set(),order:shuffle(earlyOpts().map(o=>o.k)),graded:false}; const E=C.early, O=earlyOpts(), by=Object.fromEntries(O.map(o=>[o.k,o]));
+  $('#cpHead').innerHTML=head('รอบที่ 1 · การพยาบาลตามอาการ');
+  const v=cs.pre.v;
+  $('#cpBody').innerHTML=`<div class="pt-card"><div class="eyebrow">สรุปการประเมินรอบนี้</div><div style="font-size:13.5px">${esc(cs.tool)} = <b class="mono">${C.preTruth.total}</b> คะแนน · RR ${v.rr} · SpO₂ ${v.spo2}% · HR ${v.hr}${v.sbp?` · BP ${v.sbp}/${v.dbp}`:''} · T ${v.temp}</div></div>
+   <p style="margin:0">ผู้ป่วยยังไม่เข้าเกณฑ์ตามทีม เลือก<b>การพยาบาลที่เหมาะสม</b>สำหรับรอบนี้ (เลือกได้หลายข้อ บางข้อไม่ควรทำ)</p>
+   <div style="display:grid;gap:6px">${E.order.map(k=>{ const o=by[k]; if(!o) return ''; const s=E.sel.has(k); let cls=''; if(E.graded){ if(s&&o.kind==='bad')cls='wrong'; else if(s&&o.kind!=='bad')cls='right'; else if(!s&&o.kind==='req')cls='miss'; }
+     return `<label class="cb ${cls}" data-k="${k}"><input type="checkbox" ${s?'checked':''} ${E.graded?'disabled':''}><span>${esc(o.t)}${E.graded&&(o.kind==='bad'&&s||o.kind==='req'&&!s||o.kind!=='ok'&&s)?`<br><small class="muted">${o.kind==='bad'?'ไม่ควรทำ: ':o.kind==='req'?'ควรทำ: ':''}${esc(o.why)}</small>`:''}</span></label>`; }).join('')}</div><div id="eFb"></div>
+   ${hint('รอบที่คะแนนยังไม่ถึงเกณฑ์: ประเมินหาสาเหตุ บันทึกแนวโน้ม แจ้ง in-charge เพิ่มความถี่ในการติดตาม และให้การพยาบาลตามอาการ ไม่ประกาศ ERT ก่อนเข้าเกณฑ์')}`;
+  actions('');
+  if(!E.graded){ $$('#cpBody label.cb input').forEach(i=>i.onchange=e=>{ const k=i.closest('label').dataset.k; e.target.checked?E.sel.add(k):E.sel.delete(k); });
+    setFoot([{id:'bC',t:'ยืนยันการพยาบาล',cls:'primary',on:()=>{ E.graded=true; gradeEarly(); rEarly(); }}]); return; }
+  const req=O.filter(o=>o.kind==='req'), rec=O.filter(o=>o.kind==='rec'), bad=O.filter(o=>o.kind==='bad'&&E.sel.has(o.k));
+  const hitR=req.filter(o=>E.sel.has(o.k)).length, hitC=rec.filter(o=>E.sel.has(o.k)).length;
+  $('#eFb').innerHTML=`<div class="fb ${hitR===req.length&&!bad.length?'ok':'bad'}"><b>การพยาบาลรอบแรก ${hitR}/${req.length} ข้อสำคัญ</b>${rec.length?` · ข้อแนะนำ ${hitC}/${rec.length}`:''}${bad.length?` · เลือกข้อที่ไม่ควรทำ ${bad.length} ข้อ`:''}</div>`;
+  setFoot([{id:'bN',t:'เลือก Management protocol →',cls:'primary',on:()=>go('tier')}]);
+}
+function gradeEarly(){ const O=earlyOpts(), E=C.early; let r=0,rn=0,c=0,cn=0,b=0;
+  O.forEach(o=>{ const s=E.sel.has(o.k);
+    if(o.kind==='req'){ rn++; if(s) r++; else addErr('EARLY_MISS:'+o.k); itm('early:'+o.k,s,'o'); }
+    else if(o.kind==='rec'){ cn++; if(s) c++; }
+    else if(o.kind==='bad'){ if(s){ b++; addErr('EARLY_BAD:'+o.k); } itm('early:'+o.k,!s,'c'); } });
+  const e=Math.max(0,(rn?r/rn:1)*.7+(cn?c/cn:1)*.3-.25*b); C.earlyAdj=e>=.9?2:e>=.7?0:-Math.min(5,Math.round((.7-e)*10)); C.earlyScore=e; updScore(); }
+{ const _f=finishCase; finishCase=function(){ if(C&&C.earlyAdj){ C.dom.care=Math.max(0,Math.min(20,(C.dom.care||0)+C.earlyAdj)); } return _f.apply(this,arguments); }; }
+{ const _e=errLabel; errLabel=function(c){ if(c.startsWith('EARLY_')){ const [a,k]=c.split(':'); const o=EARLY.find(x=>x[0]===k); return (a==='EARLY_BAD'?'รอบที่ 1 เลือกการพยาบาลที่ไม่ควรทำ: ':'รอบที่ 1 ไม่ได้ทำ: ')+(o?o[1]:k); } return _e(c); }; }
+{ const _il=itemLabel; itemLabel=function(id,k){ if(k.startsWith('early:')){ const o=EARLY.find(x=>x[0]===k.slice(6)); return 'รอบที่ 1: '+(o?o[1]:k); } return _il(id,k); }; }
+// pre-round route: measure → early care → tier → (2 hours later) main round
+{ const _sg=showGrade; showGrade=function(pre){ _sg(pre); if(!pre) return; setFoot([{id:'bN',t:'ให้การพยาบาลรอบนี้ →',cls:'primary',on:()=>{ C.graded=false; C.mySum=C.preTruth.items.reduce((a,it)=>a+(C.sel[it.k]??0),0); go('early'); }}]); }; }
+{ const _r=render; render=function(){ if(C&&C.phase==='early'){ rail(); $('#ertFlash').hidden=true; rEarly(); $('#cpBody').scrollTop=0; return; } if(C&&C.phase==='handover'){ rail(); $('#ertFlash').hidden=true; rHandover2(); $('#cpBody').scrollTop=0; return; } return _r.apply(this,arguments); }; }
+{ const _rl=rail; rail=function(){ _rl(); if(C&&C.pre&&!C.pre.done){ const ph=C.phase, lab={brief:'รับเวร',tool:'เลือก EWS',measure:'วัด & ให้คะแนน',early:'การพยาบาล',tier:'Protocol'};
+    $('#stepRail').innerHTML='<span class="step on" style="background:var(--gold);color:#0b1a2e">รอบที่ 1</span>'+Object.entries(lab).map(([k,l],i,arr)=>{ const j=arr.findIndex(x=>x[0]===ph); return `<span class="step ${i<j?'done':i===j?'on':''}">${l}</span>`; }).join('')+'<span class="step">⏱ 2 ชม. ต่อมา</span>'; } }; }
+// when deteriorating, keep the early-round values for trend questions
+{ const _tr=rTier; rTier=function(){ const pre=C.pre&&!C.pre.done; if(pre) C.preVit=Object.assign({},C.cs.pre.v); return _tr.apply(this,arguments); }; }
+
+/* ---------- SBAR handover: choose the best statement per section ---------- */
+function vitLineOf(v,neo){ return neo?`T ${(+v.temp).toFixed(1)} RR ${v.rr} HR ${v.hr} SpO₂ ${v.spo2}%`:`RR ${v.rr} SpO₂ ${v.spo2}% BP ${v.sbp}/${v.dbp} HR ${v.hr} T ${(+v.temp).toFixed(1)}`; }
+function buildSbar(){
+  const cs=C.cs, p=cs.p, tr=C.truth, call=C.branch==='call', neo=p.ageDays<=28, pre=cs.pre&&cs.pre.v, preT=C.preTruth?C.preTruth.total:null;
+  const other=shuffle(CASES.filter(c=>c.id!==cs.id&&critPop(c.p)===critPop(p)&&c.p.dx!==p.dx))[0];
+  const room=(p.loc.match(/(\d{3,4})\s*$/)||[])[1], wrongLoc=room?p.loc.replace(room,String(+room+2)):p.loc+' (ห้องข้างเคียง)';
+  const wrongScore=tr.total>3?tr.total-3:tr.total+3;
+  const vv=Object.assign({},cs.v); const tweak=neo?'hr':'spo2'; vv[tweak]=tweak==='spo2'?Math.min(99,vv.spo2+6):vv.hr-25;
+  const done=(C.careOrder||[]).concat(C.firstOrder||[]).map(o=>o.k).filter((k,i,a)=>a.indexOf(k)===i&&ACTIONS[k]&&!isBad(k)&&!['revs','timelog','help','recall','chart'].includes(k));
+  const notDone=shuffle(['iv','ekg','dtx','o2','monitor','suction','position','lab','foley','neb'].filter(k=>ACTIONS[k]&&!C.done.has(k)&&!done.includes(k))).slice(0,3);
+  return [
+   {k:'s',h:'Situation · สถานการณ์ตอนนี้',q:'ข้อใดบอกสถานการณ์ของผู้ป่วยได้ถูกต้องและชัดเจนที่สุด',opts:[
+     {ok:1,t:`${p.name} ${p.ageTxt} ${p.loc} — ${cs.problem}`},
+     {ok:0,t:`${p.name} ${p.ageTxt} ${p.loc} — อาการคงที่ ไม่เปลี่ยนแปลงจากรอบก่อน`,why:'ข้อมูลไม่ตรงกับอาการปัจจุบัน'},
+     {ok:0,t:`${p.name} ${wrongLoc} — ${cs.problem}`,why:'ระบุสถานที่/ห้องผิด ทีมจะไปผิดเตียง'},
+     {ok:0,t:'ผู้ป่วยดูไม่ค่อยดี ไม่แน่ใจว่าเป็นอะไร ช่วยมาดูหน่อย',why:'คลุมเครือ ไม่ระบุตัวผู้ป่วยและปัญหา'}]},
+   {k:'b',h:'Background · ภูมิหลัง',q:'ข้อมูลภูมิหลังที่ควรสื่อสาร',opts:[
+     {ok:1,t:`รับไว้ด้วย ${p.dx}${pre?` · 2 ชั่วโมงก่อน ${cs.tool} ${preT} คะแนน (${vitLineOf(cs.pre.v,neo)})`:''}`},
+     {ok:0,t:`รับไว้ด้วย ${other?other.p.dx:'อาการไม่ระบุ'}`,why:'การวินิจฉัยไม่ใช่ของผู้ป่วยรายนี้'},
+     {ok:0,t:'ชอบรับประทานอาหารรสจัด ผ่าตัดไส้ติ่งเมื่อ 20 ปีก่อน',why:'ข้อมูลไม่เกี่ยวข้องกับปัญหาเฉียบพลัน'},
+     {ok:0,t:'ยังไม่ได้อ่านประวัติ ไม่ทราบรายละเอียด',why:'ต้องเตรียมข้อมูลก่อนรายงาน'}]},
+   {k:'a',h:'Assessment · การประเมิน',q:'ผลการประเมินล่าสุดที่ถูกต้อง',opts:[
+     {ok:1,t:`${cs.tool} ${tr.total} คะแนน · ${vitLineOf(cs.v,neo)}`},
+     {ok:0,t:`${cs.tool} ${wrongScore} คะแนน · ${vitLineOf(cs.v,neo)}`,why:'คะแนน EWS ไม่ถูกต้อง'},
+     ...(pre?[{ok:0,t:`${cs.tool} ${preT} คะแนน · ${vitLineOf(cs.pre.v,neo)}`,why:'เป็นค่าเก่าเมื่อ 2 ชั่วโมงก่อน ไม่ใช่ค่าล่าสุด'}]:[]),
+     {ok:0,t:`${cs.tool} ${tr.total} คะแนน · ${vitLineOf(vv,neo)}`,why:`ค่า ${tweak==='spo2'?'SpO₂':'HR'} ไม่ตรงกับที่วัดได้`}]},
+   {k:'r',h:'Recommendation · ข้อเสนอ',q:'สิ่งที่ต้องการให้ผู้รับรายงานทำ',opts:[
+     {ok:1,t:call?'ขอให้ทีมประเมินและให้การรักษาต่อทันที ได้แจ้งญาติแล้ว':'ขอให้แพทย์มาประเมินผู้ป่วยและสั่งการรักษาเพิ่มเติม ระหว่างนี้ติดตามสัญญาณชีพตาม protocol'},
+     {ok:0,t:'คิดว่าไม่เป็นไรมาก ขอวัดสัญญาณชีพตามรอบปกติ',why:'ไม่สอดคล้องกับความรุนแรง'},
+     {ok:0,t:'แล้วแต่จะพิจารณาครับ/ค่ะ',why:'ไม่ระบุสิ่งที่ต้องการ'},
+     {ok:0,t:'ขอย้ายผู้ป่วยไป ICU ทันทีโดยไม่ต้องประเมิน',why:'ข้ามขั้นตอนการประเมินของทีม'}]},
+   {k:'d',h:'การพยาบาลที่ทำไปแล้ว',q:'เลือกทุกข้อที่คุณ “ทำจริง” (ข้อมูลเท็จทำให้ทีมตัดสินใจผิด)',multi:true,opts:[
+     ...done.slice(0,5).map(k=>({ok:1,k,t:trayLabel?trayLabel(k):ACTIONS[k].t})),
+     ...notDone.map(k=>({ok:0,k,t:trayLabel?trayLabel(k):ACTIONS[k].t,why:'ยังไม่ได้ทำ'})),
+     ...(done.length?[]:[{ok:1,k:'none',t:'ยังไม่ได้ให้การพยาบาลใด ๆ'}])]}
+  ].map(s=>Object.assign(s,{opts:shuffle(s.opts.map((o,i)=>Object.assign({id:s.k+i},o)))}));
+}
+function rHandover2(){
+  const call=C.branch==='call';
+  $('#cpHead').innerHTML=head(call?'ขั้นที่ 8 · ส่งต่อข้อมูลให้ทีม (SBAR)':'ขั้นที่ 7 · รายงานแบบ SBAR');
+  C.sb=C.sb||{secs:buildSbar(),pick:{},graded:false}; const B=C.sb;
+  $('#cpBody').innerHTML=`<p style="margin:0">${call?'ทีม ERT มาถึงแล้ว':'รายงาน in-charge / แพทย์'} · เลือกข้อความที่<b>ถูกต้องและครบถ้วนที่สุด</b>ในแต่ละหัวข้อ</p>
+   ${B.secs.map(s=>`<div class="sb-sec"><div class="sb-h"><b>${esc(s.h)}</b><span class="muted">${esc(s.q)}</span></div>
+     ${s.opts.map(o=>{ const sel=s.multi?(B.pick[s.k]||[]).includes(o.id):B.pick[s.k]===o.id; let cls=''; if(B.graded){ if(sel&&o.ok)cls='right'; else if(sel&&!o.ok)cls='wrong'; else if(!sel&&o.ok)cls='miss'; }
+       return `<button class="choice sb-o ${cls}" data-s="${s.k}" data-o="${o.id}" aria-pressed="${sel}" ${B.graded?'disabled':''}>${s.multi?`<span class="sb-box">${sel?'☑':'☐'}</span> `:''}${esc(o.t)}${B.graded&&!o.ok&&sel&&o.why?`<small class="muted" style="display:block">${esc(o.why)}</small>`:''}</button>`; }).join('')}</div>`).join('')}
+   <div id="hFb"></div>`;
+  actions('');
+  if(!B.graded){ $$('#cpBody .sb-o').forEach(b=>b.onclick=()=>{ const s=B.secs.find(x=>x.k===b.dataset.s), id=b.dataset.o;
+      if(s.multi){ const a=B.pick[s.k]||[]; B.pick[s.k]=a.includes(id)?a.filter(x=>x!==id):[...a,id]; } else B.pick[s.k]=id; const st=$('#cpBody').scrollTop; rHandover2(); $('#cpBody').scrollTop=st; });
+    const ready=B.secs.every(s=>s.multi||B.pick[s.k]);
+    setFoot([{id:'bC',t:call?'ส่งต่อข้อมูล':'รายงาน',cls:'primary',dis:!ready,on:()=>{ B.graded=true; gradeSbar(); rHandover2(); }}]); return; }
+  $('#hFb').innerHTML=`<div class="fb ${B.score>=.99?'ok':'bad'}"><b>SBAR ${Math.round(B.score*100)}%</b> · ${B.secs.filter(s=>!s.multi).map(s=>`${s.k.toUpperCase()} ${s.opts.find(o=>o.id===B.pick[s.k])?.ok?'✓':'✗'}`).join(' · ')}</div>`;
+  setFoot([{id:'bN',t:'สรุปผลเคส →',cls:'gold',on:()=>finishCase()}]);
+}
+function gradeSbar(){ const B=C.sb; let pts=0, n=0;
+  B.secs.forEach(s=>{ n++;
+    if(!s.multi){ const o=s.opts.find(x=>x.id===B.pick[s.k]); const ok=!!(o&&o.ok); if(ok) pts++; else addErr('SBAR:'+s.k); itm('ho:'+s.k,ok,'o'); return; }
+    const pick=B.pick[s.k]||[], good=s.opts.filter(o=>o.ok), tp=good.filter(o=>pick.includes(o.id)).length, fp=s.opts.filter(o=>!o.ok&&pick.includes(o.id)).length;
+    const sc=Math.max(0,(good.length?tp/good.length:1)-.5*fp); pts+=sc; if(sc<1) addErr('SBAR:d'); itm('ho:d',sc>=1,'o'); });
+  B.score=pts/n; C.dom.handover=5*B.score; if(B.score<1) addErr('HANDOVER'); updScore(); }
+{ const _e=errLabel; errLabel=function(c){ if(c.startsWith('SBAR:')){ const k=c.slice(5); return 'SBAR: '+({s:'Situation ไม่ถูกต้อง/ไม่ชัดเจน',b:'Background ไม่ถูกต้อง',a:'Assessment (คะแนน/สัญญาณชีพ) ไม่ถูกต้อง',r:'Recommendation ไม่เหมาะสม',d:'รายงานการพยาบาลที่ทำไม่ตรงกับที่ทำจริง'}[k]||k); } return _e(c); }; }
+{ const _il=itemLabel; itemLabel=function(id,k){ const m={'ho:s':'SBAR · Situation','ho:b':'SBAR · Background','ho:a':'SBAR · Assessment','ho:r':'SBAR · Recommendation','ho:d':'SBAR · การพยาบาลที่ทำแล้ว'}; return m[k]||_il(id,k); }; }
+
+(()=>{ const st=document.createElement('style'); st.textContent=`
+ .sb-sec{display:grid;gap:6px;padding:10px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07)}
+ .sb-h{display:grid;gap:1px}.sb-h b{color:var(--gold);font-size:14px}.sb-h span{font-size:12.5px}
+ .sb-o{text-align:left;font-size:13.5px;line-height:1.45;padding:9px 11px}.sb-box{font-size:15px}
+ label.cb.miss{border-style:dashed;border-color:var(--gold)}`; document.head.appendChild(st); })();
+// decision timing starts when the patient deteriorates (main round)
+{ const _go=go; go=function(ph){ if(ph==='brief'&&C&&C.pre&&C.pre.done&&!C.mainT0){ C.mainT0=true; C.t0=performance.now(); } return _go.apply(this,arguments); }; }
+/* ================================================================
+   NURSING ACTION BARS + MORE INTERVENTIONS
+   The tray becomes a list of category bars (action/intervention groups). Tapping a bar opens its
+   sub-items underneath; tapping again folds it. New interventions add variety: some fit this patient
+   (bonus), some are neutral routine care, and some are unsafe in this situation.
+   ================================================================ */
+Object.assign(ACTIONS,{
+ trend:{t:'ทบทวนแนวโน้มสัญญาณชีพย้อนหลัง (flow sheet)',min:.5,cat:'Assess'},
+ medrev:{t:'ทบทวนยาที่ได้รับล่าสุด (MAR) หายาที่อาจเป็นสาเหตุ',min:.5,cat:'Assess'},
+ allergy:{t:'ทบทวนประวัติแพ้ยา / แพ้อาหาร',min:.5,cat:'Assess'},
+ skin:{t:'ประเมินผิวหนัง สีผิว เหงื่อ ภาวะขาดน้ำ',min:.5,cat:'Assess'},
+ abd:{t:'ประเมินหน้าท้อง ท้องอืด กดเจ็บ เลือดออกทางเดินอาหาร',min:.5,cat:'Assess'},
+ deepbr:{t:'กระตุ้นการหายใจลึก ไอขับเสมหะอย่างมีประสิทธิภาพ',min:.5,cat:'A/B'},
+ chestpt:{t:'เคาะปอดและจัดท่าระบายเสมหะ',min:1,cat:'A/B'},
+ recov:{t:'จัดท่าตะแคงกึ่งคว่ำ (recovery position) ป้องกันสำลัก',min:.5,cat:'Pos'},
+ plr:{t:'ยกปลายเท้าสูง (passive leg raise)',min:.5,cat:'Pos'},
+ ivcheck:{t:'ตรวจตำแหน่งให้สารน้ำ (IV site) และอัตราการไหล',min:.5,cat:'C'},
+ fallrisk:{t:'ประเมินความเสี่ยงพลัดตกหกล้ม ติดป้ายเตือน',min:.5,cat:'Safe'},
+ idband:{t:'ตรวจป้ายข้อมือ ยืนยันตัวผู้ป่วยด้วย 2 ตัวบ่งชี้',min:.5,cat:'Safe'},
+ callbell:{t:'วางกริ่งเรียกไว้ใกล้มือผู้ป่วย',min:.5,cat:'Safe'},
+ privacy:{t:'กั้นม่าน รักษาความเป็นส่วนตัวของผู้ป่วย',min:.5,cat:'Safe'},
+ suctready:{t:'เตรียมเครื่องดูดเสมหะและ O₂ ให้พร้อมใช้ข้างเตียง',min:.5,cat:'Prep'},
+ walk:{t:'พาผู้ป่วยลุกเดินไปห้องน้ำ',min:1,cat:'Safe',bad:true,why:'ผู้ป่วยอาการไม่คงที่ เสี่ยงหน้ามืด พลัดตก และอาการทรุดลง'},
+ o2off:{t:'ถอดออกซิเจนออกชั่วคราวเพื่อให้รับประทานอาหาร',min:.5,cat:'A/B',bad:true,why:'ผู้ป่วยต้องการออกซิเจน การถอดออกทำให้ SpO₂ ลดลง'},
+ ffluid:{t:'เปิดสารน้ำแบบ free flow เองโดยไม่มีคำสั่งการรักษา',min:.5,cat:'C',bad:true,why:'การให้สารน้ำต้องมีคำสั่งการรักษา เสี่ยงน้ำเกิน/ปอดบวมน้ำ'},
+});
+['trend','medrev','allergy','skin','abd','deepbr','recov','plr','fallrisk','idband','callbell','privacy','suctready','walk','o2off'].forEach(k=>NA_SCOPE.add(k));
+Object.assign(TRAY_LABEL,{trend:'📈 ทบทวนแนวโน้มสัญญาณชีพย้อนหลัง (flow sheet)'});
+// which new items fit / harm each case
+const NEWBAD_WHY={plr:'ผู้ป่วยมีปัญหาการหายใจ/หัวใจ การยกขาเพิ่มเลือดกลับหัวใจ ทำให้หายใจลำบากขึ้น',deepbr:'ผู้ป่วยซึม/ไม่ร่วมมือ เสี่ยงสำลัก',chestpt:'ผู้ป่วยอาการไม่คงที่ การเคาะปอดเพิ่มภาระหัวใจและการใช้ออกซิเจน'};
+CASES.forEach(c=>{ if(!c.care) return; const sys=c.sys||'other', v=c.v||{}, down=v.avpu&&v.avpu!=='A', add=(arr,k)=>{ if(!arr.includes(k)&&!c.care.req.includes(k)) arr.push(k); };
+  add(c.care.rec,'trend');
+  if(['cardio','neuro'].includes(sys)||/AR3|AN2/.test(c.id)) add(c.care.rec,'medrev');
+  if(sys==='shock'){ add(c.care.rec,'plr'); add(c.care.rec,'skin'); add(c.care.rec,'ivcheck'); }
+  if(/GI|bleed|เลือดออก/i.test(c.p.dx+c.title)) add(c.care.rec,'abd');
+  if(sys==='resp'&&!down) add(c.care.rec,'deepbr');
+  if(down||c.f?.seizure) add(c.care.rec,'recov');
+  const bad=k=>{ if(!c.care.bad.includes(k)&&!c.care.rec.includes(k)) c.care.bad.push(k); c.badWhy=c.badWhy||{}; c.badWhy[k]=c.badWhy[k]||NEWBAD_WHY[k]; };
+  if(['resp','cardio'].includes(sys)) bad('plr');
+  if(down) bad('deepbr');
+  if(['cardio','shock'].includes(sys)||down) bad('chestpt');
+});
+const lastVitTxt=v=>`RR ${v.rr} · SpO₂ ${v.spo2}% · HR ${v.hr}${v.sbp?` · BP ${v.sbp}/${v.dbp}`:''} · T ${v.temp}`;
+Object.assign(FXDEF,{
+ trend:{spot:'foot2',pose:'reachR',fx:()=>PROP.chart(),res:cs=>({t:cs.pre?`2 ชม.ก่อน: ${lastVitTxt(cs.pre.v)} → ตอนนี้: ${lastVitTxt(GS.vit)} · แนวโน้มแย่ลงชัดเจน`:`ตอนนี้: ${lastVitTxt(GS.vit)}`})},
+ medrev:{spot:'foot2',pose:'reachR',fx:()=>PROP.chart(),res:cs=>({t:cs.id==='AR3'?'ได้รับ morphine 2 ชั่วโมงก่อน — สงสัยกดการหายใจจาก opioid':cs.id==='A7'?'ได้รับยา beta-blocker เช้านี้ — อาจทำให้ชีพจรช้า':cs.id==='AN2'?'ได้รับ insulin ก่อนมื้อ แต่รับประทานอาหารได้น้อย':'ได้รับยาตามแผนการรักษา ไม่พบยาที่อธิบายอาการได้ชัดเจน'})},
+ allergy:{spot:'foot2',pose:'reachR',fx:()=>PROP.chart(),res:cs=>({t:cs.id==='AH3'?'มีประวัติแพ้ยา/อาหาร — สอดคล้องกับภาวะแพ้รุนแรง':'ไม่มีประวัติแพ้ยา'})},
+ skin:{spot:'bed',pose:'reach',res:cs=>({t:GS.vit.sbp&&GS.vit.sbp<90||cs.sys==='shock'?'ผิวซีด เย็นชื้น ปากแห้ง skin turgor ลดลง':GS.vit.temp>=38?'ผิวร้อน แดง เหงื่อออก':'ผิวอุ่น สีปกติ ชุ่มชื้นดี'})},
+ abd:{spot:'bed',pose:'press',res:cs=>({t:/GI|bleed|เลือดออก/i.test(cs.p.dx+cs.title)?'ท้องอืดเล็กน้อย bowel sound เพิ่มขึ้น ถ่ายดำ':'ท้องนุ่ม ไม่กดเจ็บ bowel sound ปกติ'})},
+ deepbr:{spot:'head',pose:'talk',say:()=>`หายใจเข้าลึก ๆ แล้วไอออกมานะ${polite()}`,res:cs=>isBad('deepbr')?{bad:cs.badWhy?.deepbr}:({v:{spo2:v=>Math.min(v.spo2+1,98)},t:'ผู้ป่วยไอขับเสมหะได้ หายใจลึกขึ้น'})},
+ chestpt:{spot:'bed',pose:'press',res:cs=>isBad('chestpt')?{bad:cs.badWhy?.chestpt,v:{hr:v=>v.hr+6}}:({t:'ระบายเสมหะได้เล็กน้อย'})},
+ recov:{spot:'bed',pose:'press',res:()=>({t:'จัดท่าตะแคงกึ่งคว่ำแล้ว ทางเดินหายใจโล่งขึ้น'})},
+ plr:{spot:'foot2',pose:'press',res:cs=>isBad('plr')?{bad:cs.badWhy?.plr,v:{spo2:v=>v.spo2-2,rr:v=>v.rr+2}}:({v:{sbp:v=>v.sbp?v.sbp+6:v.sbp,hr:v=>v.hr-3},t:'ยกปลายเท้าสูง ความดันดีขึ้นเล็กน้อยชั่วคราว'})},
+ ivcheck:{spot:'ivside',pose:'reach',res:()=>({t:'IV site ไม่บวมแดง สารน้ำไหลดีตามอัตราที่สั่ง'})},
+ fallrisk:{spot:'bed',pose:'reach',res:()=>({t:'ความเสี่ยงพลัดตกหกล้มสูง ติดป้ายเตือนแล้ว'})},
+ idband:{spot:'head',pose:'reach',res:cs=>({t:`ยืนยันชื่อ-นามสกุลและ HN ตรงกับป้ายข้อมือ: ${cs.p.name}`})},
+ callbell:{spot:'head',pose:'reach',res:()=>({t:'วางกริ่งไว้ใกล้มือ อธิบายวิธีใช้แล้ว'})},
+ privacy:{spot:'bed',pose:'reach',res:()=>({t:'กั้นม่านแล้ว'})},
+ suctready:{spot:'head',pose:'reach',res:()=>({t:'เครื่องดูดเสมหะและ O₂ พร้อมใช้ข้างเตียง'})},
+ walk:{spot:'bed',pose:'reach',res:()=>({bad:ACTIONS.walk.why,v:{hr:v=>v.hr+10,spo2:v=>v.spo2-2}})},
+ o2off:{spot:'head',pose:'reach',res:()=>({bad:ACTIONS.o2off.why,v:{spo2:v=>v.spo2-5}})},
+ ffluid:{spot:'ivside',pose:'reach',res:()=>({bad:ACTIONS.ffluid.why})},
+});
+TRAY_TABS.push(['safe','ความปลอดภัย / ทั่วไป']);
+{ const _ti=trayItems; trayItems=function(cs){ const T=_ti(cs), neo=critPop(cs.p)==='neo';
+    T.assess.splice(1,0,'trend'); T.assess.push('skin',...(neo?[]:['abd','medrev','allergy']));
+    if(!neo){ T.air.push('deepbr','chestpt','o2off'); T.pos.push('recov','plr'); }
+    T.circ.push('ivcheck',...(neo?[]:['ffluid']));
+    T.safe=['idband','callbell','fallrisk','privacy',...(neo?[]:['walk'])];
+    T.prep.splice(1,0,'suctready');
+    return T; }; }
+
+/* ---------- category bars ---------- */
+const TAB_IC={assess:'🩺',air:'🫁',pos:'🛏️',circ:'💉',neuro:'🧠',spec:'⭐',prep:'📞',safe:'🛡️'};
+{ const _rt=renderTray; renderTray=function(){ _rt.apply(this,arguments); const ap=$('#actionPanel'); if(!ap||!C||!C.tray) return;
+    const tabs=ap.querySelector('.tray-tabs'), list=ap.querySelector('.tray-list'); if(!tabs||!list) return;
+    const bars=document.createElement('div'); bars.className='tbars';
+    tabs.querySelectorAll('.tt').forEach(b=>{ const k=b.dataset.tt, items=(C.tray[k]||[]).filter(x=>ACTIONS[x]), n=items.filter(x=>C.done.has(x)).length, open=b.classList.contains('on')&&!C.trayFold;
+      const bar=document.createElement('button'); bar.className='tbar'+(open?' open':''); bar.dataset.tb=k;
+      bar.innerHTML=`<span class="tb-ic">${TAB_IC[k]||'•'}</span><span class="tb-l">${b.textContent}</span><span class="tb-n">${n?`<b>${n}</b>/`:''}${items.length}</span><span class="tb-ch">${open?'▾':'▸'}</span>`;
+      bar.onclick=()=>{ if(C.trayTab===k){ C.trayFold=!C.trayFold; } else { C.trayTab=k; C.trayFold=false; } C.pickOpen=null; renderTray(); const nb=$(`#actionPanel .tbar[data-tb="${k}"]`); nb&&nb.scrollIntoView({block:'nearest',behavior:'smooth'}); };
+      bars.appendChild(bar); if(open){ list.classList.add('tb-sub'); bars.appendChild(list); } });
+    tabs.replaceWith(bars); if(C.trayFold&&list.parentElement===ap) list.remove(); }; }
+{ const _sc=startCase; startCase=function(){ const r=_sc.apply(this,arguments); if(C) C.trayFold=false; return r; }; }
+
+(()=>{ const st=document.createElement('style'); st.textContent=`
+ .tbars{display:grid;gap:6px}
+ .tbar{display:grid;grid-template-columns:28px 1fr auto 18px;align-items:center;gap:8px;width:100%;text-align:left;padding:10px 12px;border-radius:12px;border:1px solid rgba(46,196,182,.35);background:linear-gradient(90deg,rgba(46,196,182,.14),rgba(11,26,46,.6));color:#e7f2f8;font:600 14px inherit;font-family:inherit;cursor:pointer}
+ .tbar.open{border-color:var(--teal);background:linear-gradient(90deg,rgba(46,196,182,.3),rgba(11,26,46,.7))}
+ .tb-ic{font-size:18px;text-align:center}.tb-n{font:500 12px var(--f-mono);color:var(--muted)}.tb-n b{color:var(--ok)}.tb-ch{color:var(--teal);font-size:13px}
+ .tray-list.tb-sub{display:grid;gap:6px;padding:4px 0 6px 12px;border-left:2px solid rgba(46,196,182,.4);margin-left:10px}`; document.head.appendChild(st); })();
+/* ================================================================
+   WARD BACKDROP + UNIFORM FIT
+   - Menu screens (title, guide, levels, results, dashboard) show the 3D ward: a patient in bed and two
+     nurses at the bedside, slowly orbiting, lightly blurred behind the panels.
+   - Male scrubs are cut looser (not body-tight); the female V-neck is filled so it is shallower.
+   ================================================================ */
+const LOBBY_SCR=new Set(['scr-title','scr-guide','scr-level','scr-session','scr-dash','scr-debrief']);
+function lobbyOn(){
+  if(!G3.ok||!W3.ward) return;
+  if(W3.mode!=='ward') setMode('ward');
+  if(!W3.patient||!W3.lobbyPt){ try{ const cs=CASES.find(c=>c.id==='A1')||CASES[0]; setupPatient(cs); W3.lobbyPt=true; }catch(e){ console.warn('lobby pt',e); } }
+  if(W3.player){ W3.player.position.set(.92,0,-1.35); faceTo(W3.player,0,-1.75); try{ setPose(W3.player,'talk'); }catch(e){} }
+  if(!W3.lobbyNurse){ try{ const g=playerGender()==='M'?'F':'M'; const o={gender:g,scrub:g==='F'?'#1A2B4C':'#6E1F2D',skin:SKIN[g==='F'?0:5],hairColor:HAIRC[0],hairStyle:g==='F'?'bun':'short',acc:new Set(['badge','watch']),height:g==='F'?160:172,name:'RN'};
+      const t=glbFor(o); const h=t?instGLB(t,o):buildPerson(o); h.position.set(-.95,0,-1.25); faceTo(h,0,-1.9); W3.ward.add(h); W3.lobbyNurse=h; try{ setPose(h,'reach'); }catch(e){} }catch(e){ console.warn('lobby nurse',e); } }
+  W3.lobbyNurse.visible=true;
+  const c=[[2.75,2.05,1.55],[-.1,.85,-1.75]]; W3.cam.position.set(...c[0]); W3.ctl.target.set(...c[1]);
+  W3.ctl.autoRotate=true; W3.ctl.autoRotateSpeed=.35; W3.lobby=true;
+}
+function lobbyOff(){ if(!G3.ok) return; W3.lobby=false; if(W3.ctl) W3.ctl.autoRotate=false; if(W3.lobbyNurse) W3.lobbyNurse.visible=false; if(W3.player) try{ setPose(W3.player,null); }catch(e){} }
+{ const _s=show; show=function(id){ _s(id); if(!G3.ok) return;
+    if(LOBBY_SCR.has(id)){ lobbyOn(); $('#stage').style.filter='blur(2.5px) brightness(.62) saturate(.9)'; }
+    else { lobbyOff(); if(id==='scr-game') W3.lobbyPt=false; } }; }
+// keep the orbit gentle: limit the swing so the bed stays in view
+setInterval(()=>{ if(!G3.ok||!W3.lobby||!W3.ctl) return; const a=W3.ctl.getAzimuthalAngle?W3.ctl.getAzimuthalAngle():0; if(a>1.15) W3.ctl.autoRotateSpeed=-Math.abs(W3.ctl.autoRotateSpeed); if(a<.35) W3.ctl.autoRotateSpeed=Math.abs(W3.ctl.autoRotateSpeed); },400);
+// models may finish loading after the first screen is shown
+setTimeout(()=>{ const vis=$$('.screen').find(s=>!s.hidden); if(vis&&LOBBY_SCR.has(vis.id)) show(vis.id); },2500);
+setTimeout(()=>{ const vis=$$('.screen').find(s=>!s.hidden); if(vis&&LOBBY_SCR.has(vis.id)){ if(W3.lobbyNurse&&!W3.lobbyNurse.userData.glb&&glbFor({gender:playerGender()==='M'?'F':'M'})){ W3.lobbyNurse.parent&&W3.lobbyNurse.parent.remove(W3.lobbyNurse); W3.lobbyNurse=null; } show(vis.id); } },6000);
+
+/* ---------- uniform fit ---------- */
+function loosen(geo,dn,radial){ if(!geo||geo.userData.loose) return; const P=geo.attributes.position, N=geo.attributes.normal; if(!P||!N) return;
+  for(let i=0;i<P.count;i++){ let x=P.getX(i), y=P.getY(i), z=P.getZ(i); x+=N.getX(i)*dn; y+=N.getY(i)*dn*.4; z+=N.getZ(i)*dn;
+    if(radial&&y>radial[0]&&y<radial[1]){ const cz=radial[2], d=Math.hypot(x,z-cz)||1, w=Math.sin((y-radial[0])/(radial[1]-radial[0])*Math.PI); x+=x/d*radial[3]*w; z+=(z-cz)/d*radial[3]*w; }
+    P.setXYZ(i,x,y,z); }
+  P.needsUpdate=true; geo.computeBoundingBox(); geo.computeBoundingSphere(); geo.userData.loose=true; }
+{ const _ig=instGLB; instGLB=function(gltf,o){
+    if(!o.coat&&gltf&&gltf.scene&&!gltf.userData?.fit){ const male=o.gender==='M';
+      gltf.scene.traverse(m=>{ if(!m.isMesh) return; const n=((Array.isArray(m.material)?m.material[0]:m.material).name||'').toLowerCase();
+        if(male&&n.includes('scrub_top')) loosen(m.geometry,.011,[.92,1.36,.02,.012]);
+        if(male&&n.includes('scrub_pants')) loosen(m.geometry,.008,null);
+        if(!male&&n.includes('scrub_top')) loosen(m.geometry,.003,null); });
+      gltf.userData=Object.assign(gltf.userData||{},{fit:true}); }
+    VNECK_F=o.gender!=='M'&&!o.coat; let root; try{ root=_ig.apply(this,arguments); } finally{ VNECK_F=false; }
+    return root; }; }
+/* the scrub mask texture (R fabric · G piping · B skin) draws the V-neck: compress the opening upward */
+let VNECK_F=false; const VNECK_CACHE=new Map();
+function shallowMask(mask){ if(VNECK_CACHE.has(mask.uuid)) return VNECK_CACHE.get(mask.uuid);
+  const im=mask.image, w=im.width, h=im.height, cv=document.createElement('canvas'); cv.width=w; cv.height=h; const g=cv.getContext('2d',{willReadFrequently:true}); g.drawImage(im,0,0);
+  const D=g.getImageData(0,0,w,h), a=D.data; let x0=w,x1=0,y0=h,y1=0;
+  for(let y=0;y<h*.42;y++) for(let x=0;x<w*.6;x++){ const i=(y*w+x)*4; if(a[i+2]>140){ if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y; } }
+  let out={uuid:mask.uuid,image:im};
+  if(x1>x0&&y1>y0){ const pad=Math.round(w*.018); x0=Math.max(0,x0-pad); x1=Math.min(w-1,x1+pad); const bot=Math.min(h-3,y1+pad), k=.6, src=new Uint8ClampedArray(a);
+    for(let y=y0;y<=bot;y++){ const sy=y0+(y-y0)/k; for(let x=x0;x<=x1;x++){ const i=(y*w+x)*4; let j;
+        if(sy<=bot) j=(Math.round(sy)*w+x)*4; else j=((bot+2)*w+x)*4;
+        a[i]=src[j]; a[i+1]=src[j+1]; a[i+2]=src[j+2]; a[i+3]=src[j+3]; } }
+    g.putImageData(D,0,0); out={uuid:mask.uuid+'-v',image:cv}; }
+  VNECK_CACHE.set(mask.uuid,out); return out; }
+{ const _st=scrubTex; scrubTex=function(mask,hex,skinHex){ if(VNECK_F&&mask&&mask.image&&/top/i.test(mask.name||'')) mask=Object.assign(Object.create(mask),shallowMask(mask)); return _st.call(this,mask,hex,skinHex); }; }
+(()=>{ const st=document.createElement('style'); st.textContent=`
+ #scr-title::before{content:'';position:fixed;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(6,14,26,.86) 0%,rgba(6,14,26,.62) 45%,rgba(6,14,26,.2) 75%,rgba(6,14,26,.1) 100%);z-index:-1}
+ #scr-title{z-index:10}
+ @media (max-width:820px){ #scr-title::before{background:linear-gradient(180deg,rgba(6,14,26,.55),rgba(6,14,26,.8))} }`; document.head.appendChild(st); })();
+
+/* ---------- friendly Asian faces: gentle smile, softer nose bridge, almond eyes ---------- */
+const FACEFIT={F:{yM:1.338,cx:.024,zMin:.06,eyeY:1.4057,eyeX:.030,eyeZ:.126},M:{yM:1.546,cx:.026,zMin:.07,eyeY:1.6199,eyeX:.030,eyeZ:.1346}};
+function faceFit(geo,f){ if(!geo||geo.userData.face) return; const P=geo.attributes.position; const g=(d,s)=>Math.exp(-(d*d)/(2*s*s));
+  for(let i=0;i<P.count;i++){ let x=P.getX(i), y=P.getY(i), z=P.getZ(i); if(z<f.zMin||Math.abs(y-f.yM)>.09) continue; const ax=Math.abs(x), sx=Math.sign(x)||1;
+    // smile: lift and widen the mouth corners, raise the cheeks a little
+    const wc=g(ax-f.cx,.0095)*g(y-f.yM,.008); y+=.0075*wc; z-=.0025*wc; x+=sx*.0016*wc;
+    const wk=g(ax-.036,.012)*g(y-(f.yM+.016),.011); y+=.0022*wk; z+=.0012*wk;
+    // softer, lower nose bridge
+    const wn=g(ax,.007)*g(y-(f.eyeY-.004),.008); if(z>f.eyeZ) z-=.0022*wn;
+    // upper lids slightly lower (almond eyes), outer corners a touch higher
+    const wl=g(ax-f.eyeX,.010)*g(y-(f.eyeY+.008),.004); if(z>f.eyeZ-.006) y-=.0014*wl;
+    const wo=g(ax-(f.eyeX+.017),.005)*g(y-f.eyeY,.005); y+=.0008*wo;
+    P.setXYZ(i,x,y,z); }
+  P.needsUpdate=true; geo.userData.face=true; }
+// friendlier brows: lift the inner ends a little
+function browFit(geo){ if(!geo||geo.userData.face) return; const P=geo.attributes.position; let cy=0; for(let i=0;i<P.count;i++) cy+=P.getY(i); cy/=P.count;
+  for(let i=0;i<P.count;i++){ const ax=Math.abs(P.getX(i)); const w=Math.max(0,1-(ax-.008)/.03); P.setY(i,P.getY(i)+.0022*Math.min(1,w)); }
+  P.needsUpdate=true; geo.userData.face=true; }
+{ const _ig2=instGLB; instGLB=function(gltf,o){
+    if(!o.coat&&gltf&&gltf.scene&&!gltf.userData?.face){ const f=FACEFIT[o.gender==='M'?'M':'F'];
+      gltf.scene.traverse(m=>{ if(!m.isMesh) return; const n=(Array.isArray(m.material)?m.material[0]:m.material).name||''; if(/^skin/i.test(n)) faceFit(m.geometry,f); if(/^eyebrow/i.test(n)) browFit(m.geometry); });
+      gltf.userData=Object.assign(gltf.userData||{},{face:true}); }
+    const root=_ig2.apply(this,arguments);
+    // almond-shaped eyes: flatten every eye part together so the iris stays inside the lids
+    root.traverse(m=>{ if(!m.isMesh||!m.material||!m.material.color||m.geometry.type!=='SphereGeometry') return; const hex=m.material.color.getHexString();
+      if(['f6f3ee','3b2416','050505','ffffff'].includes(hex)&&m.parent&&!m.userData.almond){ m.scale.y*=.84; m.userData.almond=true; } });
+    return root; }; }
 </script>
 
 </body>
