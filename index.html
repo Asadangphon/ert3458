@@ -1465,7 +1465,7 @@ function instGLB(gltf,o){
       const mats=(Array.isArray(m.material)?m.material:[m.material]).map(mt=>{ const n=(mt.name||'').toLowerCase(); let c=null, kind='';
         if(/^eyes?\b/.test(n)){ const cl=mt.clone(); cl.transparent=false; cl.alphaTest=.5; cl.depthWrite=true; cl.roughness=.15; return cl; }
         if(/eyebrow|eyelash/.test(n)){ const cl=mt.clone(); cl.transparent=false; cl.alphaTest=.45; cl.side=THREE.DoubleSide; cl.depthWrite=true; if(o.hairColor) cl.color=new THREE.Color('#ffffff').lerp(new THREE.Color(o.hairColor),.42); cl.opacity=.85; return cl; }
-        if(n.includes('scrub_top')){ c=o.scrub; kind='cloth'; } else if(n.includes('scrub_pants')){ c=pants; kind='cloth'; } else if(n.includes('skin')){ c=o.skin; kind='skin'; } else if(n.includes('hair')){ c=o.hairColor; kind='hair'; } else if(n.includes('shoe')){ c=o.shoes; kind='shoe'; }
+        if(n.includes('scrub_top')){ c=o.coat?'#F2F4F6':o.scrub; kind='cloth'; } else if(n.includes('scrub_pants')){ c=pants; kind='cloth'; } else if(n.includes('skin')){ c=o.skin; kind='skin'; } else if(n.includes('hair')){ c=o.hairColor; kind='hair'; } else if(n.includes('shoe')){ c=o.shoes; kind='shoe'; }
         const cl=mt.clone();
         // MPFB/MakeHuman textures carry alpha: render opaque so clothes do not vanish; hair uses cut-out
         cl.transparent=false; cl.opacity=1; cl.depthWrite=true; cl.alphaTest=kind==='hair'?.5:0; if(kind==='hair') cl.side=THREE.DoubleSide;
@@ -3465,6 +3465,1276 @@ function centreView(){ if(!G3.ok||!W3.cam||W3.mode!=='ward') return; const w=W3.
 }
 @media (max-width:1180px) and (min-width:821px){ #vitHud{min-width:0;max-width:calc(100vw - 500px)} .vh .vv{font-size:20px} .vh[data-k=bp] .vv{font-size:17px} }
 @media (max-width:820px){ #vitHud{left:8px;right:8px;transform:none;min-width:0;max-width:none;bottom:calc(56% + 50px);padding:6px 8px} .vh-row{grid-template-columns:repeat(3,1fr)} .vh .vv{font-size:18px} .vh[data-k=bp] .vv{font-size:16px} #vitHud .vh-head{display:none} }`; document.head.appendChild(st); }
+/* ================================================================
+   PEOPLE IN THE ROOM — walking without passing through each other or the bed.
+   · walkTo() now plans a route around the bed (via the foot end) and moves with
+     steering: people side-step around each other and wait when someone blocks.
+   · Standing people never overlap (soft separation), and nobody stands inside the bed.
+   · ERT arrive with their bags in hand, set them down at the bedside, then take
+     their places; the bedside nurse steps to the foot of the bed to hand over.
+   · Doctor wears a clean white coat (recoloured top) instead of the bolted-on shell.
+   ================================================================ */
+const NAVB={x0:-.8,x1:.8,z0:-2.95,z1:-.3};             // bed footprint inflated by body radius
+const CORNER={R:{x:1.05,z:.18},L:{x:-1.05,z:.18}};
+const inBed=(x,z,m=0)=>x>NAVB.x0-m&&x<NAVB.x1+m&&z>NAVB.z0-m&&z<NAVB.z1+m;
+function segHitsBed(a,b){ for(let t=.04;t<=.96;t+=.04){ if(inBed(a.x+(b.x-a.x)*t,a.z+(b.z-a.z)*t)) return true; } return false; }
+function planPath(from,to){
+  const a={x:from.x,z:from.z}, b={x:to.x,z:to.z};
+  if(!segHitsBed(a,b)) return [b];
+  const sideOf=p=>p.z>NAVB.z1?'F':p.x>=0?'R':'L';
+  const sa=sideOf(a), sb=sideOf(b), path=[];
+  if(sa!=='F') path.push(CORNER[sa]);
+  if(sb!=='F'&&sb!==sa) path.push(CORNER[sb]);
+  if(sb==='F'&&sa!=='F'&&!path.length) path.push(CORNER[sa]);
+  path.push(b);
+  // shortcut: from each point jump to the furthest waypoint that is in clear line of sight
+  const out=[]; let cur=a, i=0; while(i<path.length){ let j=path.length-1; while(j>i&&segHitsBed(cur,path[j])) j--; out.push(path[j]); cur=path[j]; i=j+1; }
+  return out;
+}
+function castList(){ return [W3.player,...(W3.ert||[]),...(W3.helpers||[]),W3.relative].filter(p=>p&&p.parent&&p.visible!==false); }
+walkTo=function(p,x,z,cb){
+  if(!p) { cb&&cb(); return; }
+  W3.tweens=W3.tweens.filter(t=>t.obj!==p.position);
+  const prev=p.userData.walkCb; p.userData.walkCb=null;
+  if(inBed(x,z)){ if(z>NAVB.z1-.15) z=NAVB.z1+.03; else x=x<0?NAVB.x0-.03:NAVB.x1+.03; }   // never aim for a spot inside the bed
+  if(Math.hypot(x-p.position.x,z-p.position.z)<.05){ p.userData.walking=false; cb&&cb(); return; }
+  p.userData.path=planPath(p.position,{x,z}); p.userData.walkCb=cb||null; p.userData.walking=true; p.userData.stuck=0; p.userData.goal={x,z};
+};
+function moveWalkers(){
+  const now=performance.now(), dt=Math.min(.6,Math.max(0,(now-(moveWalkers.t||now))/1000)); moveWalkers.t=now;   // real time, so slow PCs still walk at normal speed
+  const all=castList(); const SPEED=1.25, R=.42;
+  for(const p of all){ const u=p.userData; if(!u.walking||!u.path||!u.path.length) continue;
+    const wp=u.path[0]; let dx=wp.x-p.position.x, dz=wp.z-p.position.z; const d=Math.hypot(dx,dz);
+    if(d<.06){ u.path.shift(); if(!u.path.length){ u.walking=false; const cb=u.walkCb; u.walkCb=null; cb&&cb(); } continue; }
+    dx/=d; dz/=d; let vx=dx, vz=dz, blocked=false;
+    for(const o of all){ if(o===p) continue; const ox=o.position.x-p.position.x, oz=o.position.z-p.position.z, od=Math.hypot(ox,oz); if(od>.9||od<1e-4) continue;
+      const ahead=(ox*dx+oz*dz)/od; if(ahead<.2) continue;
+      const lat=dx*oz-dz*ox;                         // which side the other person is on
+      const s=(lat>=0?-1:1)*(1-od/.9)*.55; vx+=-dz*s; vz+=dx*s;
+      const goalNear=u.path.length===1&&Math.hypot(u.goal.x-o.position.x,u.goal.z-o.position.z)<R;
+      if(od<R&&ahead>.6&&(!o.userData.walking||goalNear)) blocked=true; }
+    const vl=Math.hypot(vx,vz)||1; vx/=vl; vz/=vl;
+    let step=Math.min(d,SPEED*dt)*(blocked?.15:1);
+    let nx=p.position.x+vx*step, nz=p.position.z+vz*step;
+    if(inBed(nx,nz)&&!inBed(p.position.x,p.position.z)){ nx=p.position.x+dx*step; nz=p.position.z+dz*step; if(inBed(nx,nz)){ nx=p.position.x; nz=p.position.z; } }
+    const moved=Math.hypot(nx-p.position.x,nz-p.position.z); p.position.x=nx; p.position.z=nz;
+    u.stuck=moved<SPEED*dt*.2?u.stuck+dt:0;
+    if(u.stuck>2.5){ u.stuck=0; if(u.path.length===1){ // goal occupied: stop a little short
+        u.path=[]; u.walking=false; const cb=u.walkCb; u.walkCb=null; cb&&cb(); continue; } u.path.shift(); }
+    const want=Math.atan2(vx,vz); let da=want-p.rotation.y; da=Math.atan2(Math.sin(da),Math.cos(da)); p.rotation.y+=da*Math.min(1,dt*10);
+  }
+  // standing people keep personal space; nobody stays inside the bed footprint
+  for(let i=0;i<all.length;i++) for(let j=i+1;j<all.length;j++){ const a=all[i], b=all[j]; if(a.userData.walking&&b.userData.walking) continue; const dx=b.position.x-a.position.x, dz=b.position.z-a.position.z, d=Math.hypot(dx,dz)||1e-3;
+    const min=.46; if(d>=min) continue; const push=(min-d)/2, ux=dx/d, uz=dz/d;
+    const wa=a===W3.player&&!a.userData.walking?.25:1, wb=b===W3.player&&!b.userData.walking?.25:1;
+    if(!inBed(a.position.x-ux*push*wa,a.position.z-uz*push*wa)){ a.position.x-=ux*push*wa*.5; a.position.z-=uz*push*wa*.5; }
+    if(!inBed(b.position.x+ux*push*wb,b.position.z+uz*push*wb)){ b.position.x+=ux*push*wb*.5; b.position.z+=uz*push*wb*.5; } }
+}
+(W3.hooks=W3.hooks||[]).unshift(dt=>{ try{ moveWalkers(); }catch(e){ if(!moveWalkers.err){ moveWalkers.err=1; console.error('walk',e); } } });
+
+/* extra people (helpers, relative) animate like the main cast */
+onFrame(dt=>{ [...(W3.helpers||[]),W3.relative].forEach(p=>{ if(!p) return; if(p.userData.glb) animGLB(p,dt); applyPose&&applyPose(p,dt); }); });
+
+/* ---------- ERT arrival: carry bags, set them down, take positions ---------- */
+SPOTS.handover=[1.12,-.42,0,-1.5];
+const ERT_SLOTS=[[-.9,-1.95,0,-2.2],[.9,-2.15,0,-2.4],[-.9,-1.05,0,-1.25]];   // MD left-head · RN airway right-head · RN left-mid
+spawnERT=function(){
+  if(!G3.ok) return; clearERT();
+  const mk=o=>{ const g=glbFor(o); return g?instGLB(g,o):buildPerson(o); };
+  const team=[
+    mk({gender:'M',coat:true,scrub:'#1A2B4C',skin:SKIN[1],hairColor:HAIRC[0],hairStyle:'short',acc:new Set(['steth','badge']),height:176,name:'ERT MD'}),
+    mk({gender:'F',scrub:'#1A2B4C',skin:SKIN[0],hairColor:HAIRC[1],hairStyle:'bun',acc:new Set(['scrubcap','badge']),height:162,name:'ERT RN'}),
+    mk({gender:'M',scrub:'#1A2B4C',skin:SKIN[2],hairColor:HAIRC[0],hairStyle:'crew',acc:new Set(['badge']),height:172,name:'ERT RN'}),
+  ];
+  // the ERT bag and transport monitor come on a small trolley pushed by the ERT nurse (nothing is strapped to anyone's body)
+  const tr=buildErtTrolley(); W3.ward.add(tr); (W3.ertProps=W3.ertProps||[]).push(tr);
+  const queue=[0,2,1]; team.forEach((t,i)=>{ t.position.set(4.3+queue.indexOf(i)*.75,0,1.75); t.rotation.y=-Math.PI/2; W3.ward.add(t); });   // line up in the order they will enter
+  W3.ert=team; tr.userData.pusher=team[2]; tr.position.set(team[2].position.x-.5,0,1.75); tr.rotation.y=-Math.PI/2;
+  // enter one at a time, the people going to the far side first, so paths never cross
+  const go=(i,delay,park)=>setTimeout(()=>{ if(W3.ert!==team) return; const s=ERT_SLOTS[i]; const t=team[i];
+      const toSlot=()=>walkTo(t,s[0],s[1],()=>faceTo(t,s[2],s[3]));
+      walkTo(t,2.55,1.5,()=>{ if(park) walkTo(t,-.55,.62,()=>{ tr.userData.pusher=null; tr.userData.parked=true; toSlot(); }); else toSlot(); }); },delay);
+  go(0,0); go(2,1300,true); go(1,2700);
+  tween(W3.door.rotation,{y:-1.2},.6); W3.door.position.set(3.1,1.05,2.4);
+  setTimeout(()=>{ if(W3.ert===team&&W3.player) nurseTo('handover'); },900);
+};
+{ const _c=clearERT; clearERT=function(){ _c(); (W3.ertProps||[]).forEach(o=>o.parent&&o.parent.remove(o)); W3.ertProps=[]; }; }
+
+function buildErtTrolley(){ const g=new THREE.Group(), steel=M('#C9D1D7',{metalness:.6,roughness:.35});
+  g.add(mesh(new RoundedBoxGeometry(.42,.04,.6,2,.01),steel,0,.62,0)); g.add(mesh(new RoundedBoxGeometry(.42,.04,.6,2,.01),steel,0,.22,0));
+  for(const [x,z] of [[-.19,-.27],[.19,-.27],[-.19,.27],[.19,.27]]){ g.add(mesh(new THREE.CylinderGeometry(.012,.012,.6,8),steel,x,.33,z)); g.add(mesh(new THREE.CylinderGeometry(.035,.035,.03,12).rotateZ(Math.PI/2),M('#2a2a2a'),x,.035,z)); }
+  const bag=new THREE.Group(); bag.add(mesh(new RoundedBoxGeometry(.38,.24,.3,2,.04),M('#C8242F',{roughness:.7}))); bag.add(mesh(new THREE.BoxGeometry(.1,.03,.31),M('#ffffff'),0,.03,0,false)); bag.add(mesh(new THREE.BoxGeometry(.03,.1,.31),M('#ffffff'),0,.03,0,false));
+  bag.position.set(0,.36,0); g.add(bag);
+  const mon=new THREE.Group(); mon.add(mesh(new RoundedBoxGeometry(.32,.22,.14,2,.02),M('#2B323A'))); mon.add(mesh(new THREE.PlaneGeometry(.22,.14),new THREE.MeshBasicMaterial({color:'#0d3b2a'}),0,.01,.071,false));
+  mon.position.set(0,.76,.05); mon.rotation.y=Math.PI; g.add(mon);
+  const tank=mesh(new THREE.CylinderGeometry(.05,.05,.5,14),M('#2E8B57',{roughness:.5}),.15,.48,.22); tank.rotation.x=.2; g.add(tank);
+  return g; }
+// the trolley rolls in front of whoever pushes it
+onFrame(()=>{ (W3.ertProps||[]).forEach(o=>{ const p=o.userData.pusher; if(!p) return; const a=p.rotation.y; o.position.x=p.position.x+Math.sin(a)*.5; o.position.z=p.position.z+Math.cos(a)*.5; o.rotation.y=a; }); });
+
+/* ---------- doctor: white coat comes from the top colour (see instGLB); no extra shell ---------- */
+glbCoat=function(){};
+/* ================================================================
+   CLINICAL REASONING (step 3) — logic chain instead of true/false.
+   Q1  ปัญหาหลักของผู้ป่วย (single best answer)
+   Q2  ข้อมูลใดสนับสนุนปัญหานี้ (select all that apply: cues from the story + vital signs)
+   Q3  ถ้าไม่ได้รับการแก้ไข สิ่งที่น่ากังวลที่สุดคือ (single best answer)
+   Scoring (reason domain 10): Q1 4 · Q2 4 (hits − false picks) · Q3 2.
+   ================================================================ */
+const PB={
+ hypox_infect:['การแลกเปลี่ยนก๊าซบกพร่อง พร่องออกซิเจนจากปอดอักเสบ/ติดเชื้อ','หายใจล้มเหลวและหัวใจหยุดเต้นจากการขาดออกซิเจน'],
+ airway_secr:['ทางเดินหายใจไม่โล่งจากเสมหะอุดกั้น','ขาดออกซิเจนรุนแรงจนหายใจล้มเหลว'],
+ bronchospasm:['หลอดลมหดเกร็งจากหอบหืดกำเริบ ทำให้แลกเปลี่ยนก๊าซบกพร่อง','กล้ามเนื้อหายใจอ่อนล้า เสียงวี้ดเงียบลง และหายใจล้มเหลว'],
+ resp_depress:['การหายใจถูกกดจากยากลุ่ม opioid','หยุดหายใจและหัวใจหยุดเต้น'],
+ pe:['สงสัยลิ่มเลือดอุดหลอดเลือดปอด (pulmonary embolism)','หัวใจซีกขวาล้มเหลว ช็อก และหัวใจหยุดเต้นเฉียบพลัน'],
+ aspiration:['สำลักอาหารลงหลอดลม ทางเดินหายใจไม่โล่ง','ปอดอักเสบจากการสำลักและหายใจล้มเหลว'],
+ co2_copd:['สับสนจากพร่องออกซิเจน/คาร์บอนไดออกไซด์คั่งในผู้ป่วย COPD','ซึมลงจาก CO₂ คั่งจนหมดสติและหายใจล้มเหลว'],
+ peds_resp:['เด็กหายใจลำบากรุนแรง ใช้แรงหายใจมาก','เด็กอ่อนล้า หายใจล้มเหลว นำไปสู่หัวใจหยุดเต้น'],
+ seizure:['ชักต่อเนื่อง ทางเดินหายใจไม่ปลอดภัยและเสี่ยงต่อการบาดเจ็บ','สมองขาดออกซิเจน สำลัก และชักต่อเนื่องไม่หยุด (status epilepticus)'],
+ hypogly:['ระดับความรู้สึกตัวลดลงจากน้ำตาลในเลือดต่ำ','ชักและสมองถูกทำลายถาวรจากน้ำตาลต่ำ'],
+ icp:['ความดันในกะโหลกศีรษะสูง (Cushing triad)','สมองเคลื่อน (brain herniation) และหยุดหายใจ'],
+ hepenc:['สับสนซึมลงจากภาวะตับวาย (hepatic encephalopathy)','ซึมลงจนหมดสติ สำลัก และทางเดินหายใจอุดกั้น'],
+ stroke:['สงสัยโรคหลอดเลือดสมองเฉียบพลัน (stroke)','เนื้อสมองตายถาวร และพลาดช่วงเวลาที่จะให้ยาละลายลิ่มเลือด'],
+ acs:['กล้ามเนื้อหัวใจขาดเลือดเฉียบพลัน (acute coronary syndrome)','หัวใจเต้นผิดจังหวะชนิดรุนแรง (VT/VF) และหัวใจหยุดเต้น'],
+ acs_shock:['กล้ามเนื้อหัวใจขาดเลือดเฉียบพลันร่วมกับการไหลเวียนล้มเหลว','ช็อกจากหัวใจ (cardiogenic shock) และหัวใจหยุดเต้น'],
+ brady:['หัวใจเต้นช้าผิดปกติ เลือดออกจากหัวใจลดลง','หมดสติซ้ำ ความดันตก และหัวใจหยุดเต้น'],
+ svt:['หัวใจเต้นเร็วผิดจังหวะ (สงสัย SVT)','ความดันตก ช็อก และหัวใจหยุดเต้น'],
+ pulm_edema:['น้ำเกินและน้ำท่วมปอดเฉียบพลัน','ขาดออกซิเจนรุนแรงจนหายใจล้มเหลว'],
+ sepsis:['ติดเชื้อรุนแรงจนระบบไหลเวียนล้มเหลว (sepsis / septic shock)','อวัยวะล้มเหลวหลายระบบและเสียชีวิต'],
+ hemorrhage:['ช็อกจากการเสียเลือด (hypovolemic shock)','อวัยวะขาดเลือด ช็อกไม่ตอบสนอง และหัวใจหยุดเต้น'],
+ dehydration:['ปริมาณสารน้ำในร่างกายพร่องจากการสูญเสียทางอุจจาระ/อาเจียน','ช็อกจากการขาดน้ำและไตวายเฉียบพลัน'],
+ mild_dehyd:['เสี่ยงขาดน้ำเล็กน้อยจากการสูญเสียน้ำ ยังชดเชยได้','ขาดน้ำมากขึ้นจนชีพจรเร็วและความดันลดลง'],
+ anaphylaxis:['แพ้ยารุนแรง (anaphylaxis)','ทางเดินหายใจบวมอุดกั้น ช็อก และหัวใจหยุดเต้นภายในไม่กี่นาที'],
+ preeclampsia:['ครรภ์เป็นพิษรุนแรง (severe preeclampsia)','ชัก (eclampsia) เลือดออกในสมอง และรกลอกตัวก่อนกำหนด'],
+ chorio:['สงสัยติดเชื้อในถุงน้ำคร่ำ/ติดเชื้อรุนแรงระยะคลอด','มารดาเกิด septic shock และทารกในครรภ์ขาดออกซิเจน'],
+ ob_hypox:['พร่องออกซิเจนในหญิงตั้งครรภ์จากหอบหืดกำเริบ','ทารกในครรภ์ขาดออกซิเจน และมารดาหายใจล้มเหลว'],
+ ob_dehyd:['ขาดน้ำรุนแรงในหญิงตั้งครรภ์จนความดันต่ำ','ช็อก และเลือดไปเลี้ยงทารกในครรภ์ไม่เพียงพอ'],
+ neo_cold:['ทารกอุณหภูมิกายต่ำ ร่วมกับสงสัยติดเชื้อหรือน้ำตาลต่ำ','หยุดหายใจ น้ำตาลต่ำ และช็อกจากการติดเชื้อ'],
+ neo_warm:['ทารกอุณหภูมิสูงจากสิ่งแวดล้อม (ห่อผ้าหนา/แดดส่อง)','ขาดน้ำ และแยกไม่ออกจากไข้จริงถ้าไม่ปรับสิ่งแวดล้อมแล้ววัดซ้ำ'],
+ neo_rd:['ทารกหายใจลำบาก (respiratory distress)','อ่อนล้า หายใจล้มเหลว และหยุดหายใจ'],
+ infant_sepsis:['ทารกมีไข้ร่วมกับการไหลเวียนเลือดไม่ดี สงสัยติดเชื้อรุนแรง','septic shock และหัวใจหยุดเต้น'],
+ postop_pain:['ปวดแผลหลังผ่าตัด สัญญาณชีพเปลี่ยนเล็กน้อย ต้องประเมินซ้ำ','อาจพลาดภาวะเลือดออกหลังผ่าตัดถ้าไม่ติดตามตามรอบ'],
+ ob_vomit:['ขาดน้ำเล็กน้อยจากการอาเจียนในหญิงตั้งครรภ์','ขาดน้ำมากขึ้นและเกลือแร่ผิดปกติถ้าไม่ได้รับการแก้ไข'],
+};
+const PB_CAT={hypox_infect:'resp',airway_secr:'resp',bronchospasm:'resp',resp_depress:'resp',aspiration:'resp',co2_copd:'resp',peds_resp:'resp',pulm_edema:'resp',neo_rd:'resp',ob_hypox:'resp',
+ pe:'circ',acs:'circ',acs_shock:'circ',brady:'circ',svt:'circ',sepsis:'circ',hemorrhage:'circ',dehydration:'circ',mild_dehyd:'circ',anaphylaxis:'circ',infant_sepsis:'circ',ob_dehyd:'circ',chorio:'circ',postop_pain:'circ',
+ seizure:'neuro',hypogly:'neuro',icp:'neuro',hepenc:'neuro',stroke:'neuro',preeclampsia:'neuro',neo_cold:'temp',neo_warm:'temp',ob_vomit:'fluid'};
+// per case: problem key · plausible alternative problems · supporting cues · non-supporting / absent findings
+const RSN={
+ A1:{pb:'hypox_infect',alt:['pe','pulm_edema','co2_copd'],cue:['พูดได้เป็นคำ ๆ หายใจ 30 ครั้ง/นาที','SpO₂ 89% ขณะหายใจอากาศปกติ','ไข้ 38.7 °C ร่วมกับชีพจร 118 ในผู้ป่วยปอดอักเสบ'],no:['น่องข้างหนึ่งบวมกว่าอีกข้าง','ไอเสมหะเป็นฟองสีชมพู','ผู้ป่วยได้ยานอนหลับก่อนนอน']},
+ A2:{pb:'postop_pain',alt:['hemorrhage','sepsis','pe'],cue:['ปวดแผล 6/10 หลังผ่าตัดวันแรก','HR 96 RR 22 สูงขึ้นเล็กน้อย','ยังพูดคุยรู้เรื่อง ความดัน 108/70'],no:['ผ้าปิดแผลชุ่มเลือดต้องเปลี่ยนบ่อย','SBP ต่ำกว่า 90','สับสนขึ้นใหม่']},
+ P1:{pb:'peds_resp',alt:['infant_sepsis','seizure','mild_dehyd'],cue:['หายใจเร็ว 62 ครั้ง/นาที เห็นหน้าอกบุ๋ม','ซึมลง ไม่ค่อยเล่น','SpO₂ 92% ทั้งที่ได้ O₂ mask 4 L/min'],no:['เกร็งกระตุกทั้งตัว','ถ่ายเหลวหลายครั้ง','ผื่นนูนแดงทั้งตัว']},
+ P2:{pb:'mild_dehyd',alt:['infant_sepsis','hemorrhage','peds_resp'],cue:['ถ่ายเหลว 3 ครั้งในเวรนี้','ชีพจร 115 สูงกว่าปกติเล็กน้อย','ยังเล่นได้ CRT ปกติ ดื่มน้ำเกลือแร่ได้'],no:['ซึม ปลุกยาก','หน้าอกบุ๋ม','ปลายมือเท้าเย็น CRT 3 วินาที']},
+ O3:{pb:'ob_vomit',alt:['preeclampsia','ob_dehyd','chorio'],cue:['อาเจียน 2 ครั้ง อ่อนเพลีย','ชีพจร 106','ความดัน 112/70 ทารกดิ้นดี'],no:['ปวดศีรษะ ตาพร่า','ความดัน 160/110','น้ำเดินมานานร่วมกับไข้']},
+ A3:{pb:'co2_copd',alt:['stroke','hypogly','sepsis'],cue:['สับสนขึ้นใหม่ ดึงสายออกซิเจน','เป็น COPD ได้ O₂ 2 L/min อยู่','SpO₂ 92% RR 24'],no:['อ่อนแรงซีกใดซีกหนึ่ง','ไข้ 39 °C ร่วมกับความดันต่ำ','เหงื่อออกตัวเย็นหลังได้ insulin']},
+ A4:{pb:'acs',alt:['pe','svt','postop_pain'],cue:['เจ็บแน่นหน้าอกเหมือนมีของหนักทับ ร้าวไปแขนซ้าย','เหงื่อออก เริ่มเป็น 10 นาที','ความดัน 150/90 ชีพจร 88'],no:['เจ็บเมื่อกดบริเวณหน้าอก','น่องข้างขวาบวม','ไข้ ไอมีเสมหะ']},
+ A7:{pb:'brady',alt:['acs','hypogly','stroke'],cue:['วูบในห้องน้ำ หน้ามืด ใจสั่น','ชีพจร 38 ครั้ง/นาที','ได้ยา beta-blocker ความดัน 92/58'],no:['แขนขาข้างหนึ่งอ่อนแรง','น้ำตาลในเลือดต่ำที่ทราบแล้ว','ไข้หนาวสั่น']},
+ P3:{pb:'peds_resp',alt:['infant_sepsis','mild_dehyd','neo_rd'],cue:['หายใจเร็ว 75 ใช้กล้ามเนื้อช่วยหายใจ','ชีพจร 185 ร้องกวน ปลอบไม่หยุด','ดูดนมได้น้อย SpO₂ 93% on O₂ 2 L'],no:['ชักเกร็งกระตุก','ถ่ายเหลวเป็นน้ำ','จุดเลือดออกตามตัว']},
+ P4:{pb:'seizure',alt:['hypogly','infant_sepsis','peds_resp'],cue:['เกร็งกระตุกทั้งตัว ตาเหลือก นานกว่า 5 นาที','ปลุกไม่ตื่น','SpO₂ 91% ไข้ 39.4 °C'],no:['หายใจมีเสียงวี้ด','เลือดออกจากแผล','ถ่ายเหลวหลายครั้ง']},
+ N1:{pb:'neo_cold',alt:['neo_rd','neo_warm','infant_sepsis'],cue:['อุณหภูมิ 35.3 °C จับตัวเย็น','หลับตลอด ไม่ค่อยดูดนม','ชีพจร 170 SpO₂ 93%'],no:['ห่อผ้าหลายชั้นอยู่ใกล้แดด','หายใจมีเสียงคราง','ร้องเสียงดังดูดนมดี']},
+ N3:{pb:'neo_warm',alt:['neo_cold','infant_sepsis','neo_rd'],cue:['ห่อผ้าหลายชั้น อยู่ใกล้หน้าต่างที่มีแดด','อุณหภูมิ 37.6 °C','ดูดนมดี ร้องเสียงดัง สัญญาณชีพอื่นปกติ'],no:['ซึม ดูดนมลดลง','หายใจมีเสียงคราง ปีกจมูกบาน','ตัวเย็น 35 °C']},
+ O1:{pb:'preeclampsia',alt:['stroke','chorio','ob_vomit'],cue:['BP 166/112 ในครรภ์ 32 สัปดาห์','ปวดศีรษะมาก ตาพร่า จุกแน่นลิ้นปี่','ปัสสาวะ 25 ml/hr'],no:['ไข้หนาวสั่น น้ำเดินนาน','หายใจมีเสียงวี้ด','ถ่ายเหลวหลายครั้ง']},
+ A5:{pb:'stroke',alt:['hypogly','icp','hepenc'],cue:['แขนขาขวาอ่อนแรง พูดไม่ชัด ปากเบี้ยว','เกิดขึ้นทันทีภายใน 30 นาที','มี atrial fibrillation และเบาหวาน ซึมลง (V)'],no:['เหงื่อออกตัวเย็นหลังได้ insulin','ไข้และความดันต่ำ','ได้ยา morphine ทาง PCA']},
+ A6:{pb:'sepsis',alt:['dehydration','hemorrhage','stroke'],cue:['ไข้ 38.9 °C ในผู้ป่วยติดเชื้อทางเดินปัสสาวะ','SBP 88 ชีพจร 128 ปลายมือเย็น ปัสสาวะออกน้อย','สับสนขึ้นใหม่ RR 26'],no:['อาเจียนเป็นเลือด','แขนขาข้างหนึ่งอ่อนแรง','ผื่นนูนแดงหลังได้ยา']},
+ P5:{pb:'hemorrhage',alt:['sepsis','mild_dehyd','peds_resp'],cue:['แผลผ่าตัดมีเลือดซึมใหม่ภายใน 15 นาที','HR 124 SBP 88','ง่วงซึม ตัวซีด CRT ช้า'],no:['ไข้สูงหนาวสั่น','หายใจมีเสียงวี้ด','ถ่ายเหลวหลายครั้ง']},
+ P6:{pb:'infant_sepsis',alt:['peds_resp','mild_dehyd','neo_cold'],cue:['ทารกอายุ 45 วัน ไข้ 38.6 °C','ชีพจร 195 ปลายมือเท้าเย็น CRT ช้า','ร้องกวน ดูดนมน้อยลง SBP 70'],no:['ห่อผ้าหนาอยู่ใกล้แดด','ชักเกร็งกระตุก','เลือดออกจากแผล']},
+ N2:{pb:'neo_rd',alt:['neo_cold','infant_sepsis','neo_warm'],cue:['หายใจมีเสียงคราง (grunting) ปีกจมูกบาน','RR 64','SpO₂ 91% ทารกผ่าตัดคลอด'],no:['อุณหภูมิ 35.3 °C ตัวเย็น','ห่อผ้าหลายชั้นใกล้แดด','ซึม ไม่ขยับแขนขา']},
+ O2:{pb:'chorio',alt:['preeclampsia','sepsis','ob_hypox'],cue:['น้ำเดินมา 20 ชั่วโมง ร่วมกับไข้ 38.7 °C','หนาวสั่น ชีพจร 124','หายใจเร็ว 24'],no:['ความดัน 166/112 ปวดศีรษะ','หายใจมีเสียงวี้ด','อาเจียนหลายครั้ง']},
+ O4:{pb:'ob_hypox',alt:['preeclampsia','pe','chorio'],cue:['หายใจมีเสียงวี้ด พูดได้เป็นประโยคสั้น ๆ','SpO₂ 93% (เกณฑ์ ERT หญิงตั้งครรภ์ ≤ 94%)','ครรภ์ 24 สัปดาห์ บอกว่าเหนื่อย'],no:['ความดัน 166/112','น่องบวมข้างเดียว','ไข้ น้ำเดินนาน']},
+ O5:{pb:'ob_dehyd',alt:['hemorrhage','sepsis','ob_vomit'],cue:['ถ่ายเหลวมาก ปากแห้ง','SBP 86 ชีพจร 134','หน้ามืดเวลาลุกนั่ง ตัวเย็น'],no:['เลือดออกทางช่องคลอด','ไข้สูงหนาวสั่น','ปวดศีรษะตาพร่า']},
+ AR1:{pb:'airway_secr',alt:['aspiration','hypox_infect','stroke'],cue:['เสียงครืดคราดในลำคอ ไอไม่มีแรง','SpO₂ 86% ริมฝีปากคล้ำ RR 32','ต้องเรียกจึงลืมตา (V) ผู้ป่วย old stroke'],no:['หายใจมีเสียงวี้ดทั้งสองข้าง','น่องบวมข้างเดียว','ความดันต่ำกว่า 90']},
+ AR2:{pb:'bronchospasm',alt:['pe','pulm_edema','hypox_infect'],cue:['หายใจมีเสียงวี้ด นั่งโน้มตัวไปข้างหน้า','พูดได้เป็นคำ ๆ RR 34','SpO₂ 88% ใช้ยาพ่นแล้วไม่ดีขึ้น'],no:['ไอเสมหะฟองสีชมพู','ไข้ 39 °C','น่องบวมข้างเดียว']},
+ AR3:{pb:'resp_depress',alt:['stroke','hypogly','icp'],cue:['หายใจ 7 ครั้ง/นาที กรนเสียงดัง','ได้ morphine ทาง PCA กดยาบ่อย','รูม่านตาเล็กทั้งสองข้าง ปลุกยาก (P)'],no:['รูม่านตาสองข้างไม่เท่ากัน','อ่อนแรงซีกเดียว','เหงื่อออกตัวเย็นหลังได้ insulin']},
+ AR4:{pb:'pe',alt:['acs','hypox_infect','hemorrhage'],cue:['เหนื่อยหอบทันทีหลังลุกเดิน หลังผ่าตัดวันที่ 3','น่องขวาบวมกว่าข้างซ้าย','SpO₂ 89% HR 128 SBP 98'],no:['ไข้ ไอมีเสมหะเขียว','เสียงวี้ดทั้งสองข้าง','ผ้าปิดแผลชุ่มเลือด']},
+ AR5:{pb:'aspiration',alt:['airway_secr','hypox_infect','stroke'],cue:['ไอสำลักขณะญาติป้อนข้าวต้ม','มีภาวะกลืนลำบากจาก dementia','หายใจเหนื่อย มีเสียงครืดคราด SpO₂ 88%'],no:['ไข้มา 3 วัน','น่องบวมข้างเดียว','ความดัน 80/50']},
+ AN1:{pb:'seizure',alt:['hypogly','icp','stroke'],cue:['เกร็งกระตุกทั้งตัว น้ำลายฟูมปาก','เรียกไม่ตอบสนอง (U)','SpO₂ 89% มีเนื้องอกในสมอง'],no:['ได้ insulin ขณะงดอาหาร','อ่อนแรงซีกเดียวขณะรู้สึกตัวดี','ได้ morphine PCA']},
+ AN2:{pb:'hypogly',alt:['stroke','sepsis','resp_depress'],cue:['ได้ insulin ตามเวลาแต่งดอาหาร','เหงื่อออกมาก ตัวเย็น','ซึมลง ต้องหยิกจึงขยับ (P)'],no:['รูม่านตาเล็กทั้งสองข้าง หายใจช้า','ไข้ 39 °C ความดันต่ำ','ปากเบี้ยว แขนขาข้างหนึ่งอ่อนแรง']},
+ AN3:{pb:'icp',alt:['stroke','seizure','resp_depress'],cue:['หลังผ่าตัดสมอง ซึมลงจากเมื่อเช้า','ปวดศีรษะมาก อาเจียนพุ่ง รูม่านตาขวาใหญ่กว่า','BP 196/98 HR 52 RR 10'],no:['รูม่านตาเล็กสองข้างหลังได้ morphine','เหงื่อออกตัวเย็นหลังได้ insulin','ไข้และความดันต่ำ']},
+ AN4:{pb:'hepenc',alt:['hypogly','stroke','sepsis'],cue:['ตับแข็ง ง่วงซึมมากขึ้นเรื่อย ๆ','ตอบไม่ตรงคำถาม มือสั่นกระตุก (flapping)','ไม่ถ่ายมา 3 วัน'],no:['อ่อนแรงครึ่งซีกเฉียบพลัน','ไข้ 39 °C ความดัน 80/50','อาเจียนเป็นเลือดสด']},
+ AN5:{pb:'stroke',alt:['hypogly','icp','hepenc'],cue:['ยกแขนซ้ายไม่ขึ้น ปากเบี้ยว พูดไม่ชัด','เวลาปกติครั้งสุดท้าย 22:00 (last seen normal)','มี AF และความดันสูง BP 178/96'],no:['เหงื่อออกตัวเย็นหลังได้ insulin','ปลุกยาก รูม่านตาเล็ก','ไข้ หนาวสั่น']},
+ AC1:{pb:'acs_shock',alt:['pe','sepsis','svt'],cue:['เจ็บแน่นกลางอก 30 นาที เหงื่อแตก คลื่นไส้','SBP 88 ตัวเย็น ชีพจร 104','มีความดันสูง เบาหวาน ไขมันในเลือดสูง'],no:['เจ็บเมื่อขยับตัวหรือกดหน้าอก','น่องบวมข้างเดียว','ไข้หนาวสั่น']},
+ AC2:{pb:'pulm_edema',alt:['hypox_infect','acs','bronchospasm'],cue:['ต้องลุกนั่งจึงหายใจได้ ไอเสมหะฟองสีชมพู','ฟังปอดมี crackles ทั้งสองข้าง ขาบวม','CKD ได้ IV fluid 120 ml/hr SpO₂ 86%'],no:['ไข้ 39 °C เสมหะเขียว','น่องบวมข้างเดียวหลังผ่าตัด','เสียงวี้ดดีขึ้นเมื่อพ่นยา']},
+ AC3:{pb:'svt',alt:['acs','dehydration','brady'],cue:['ใจสั่นขึ้นทันทีขณะนั่งพัก','ชีพจร 182 เร็วจนนับยาก','หน้ามืด แน่นหน้าอกเล็กน้อย'],no:['ชีพจร 38','เจ็บร้าวแขนซ้ายนาน 30 นาที','ไข้หนาวสั่น']},
+ AH1:{pb:'hemorrhage',alt:['sepsis','dehydration','hepenc'],cue:['อาเจียนเป็นเลือดสดประมาณ 300 ml','SBP 84 ชีพจร 124','หน้ามืดเวลาลุก ตัวเย็น เหงื่อออก มี esophageal varices'],no:['ไข้ 39 °C หนาวสั่น','สับสนและมือสั่นกระตุก','ถ่ายเหลวเป็นน้ำหลายครั้ง']},
+ AH2:{pb:'dehydration',alt:['sepsis','hemorrhage','stroke'],cue:['ถ่ายเหลวเป็นน้ำ 8 ครั้ง ปากแห้ง ปัสสาวะน้อย','SBP 82 ชีพจร 118','สับสนขึ้นใหม่ในผู้สูงอายุ'],no:['อาเจียนเป็นเลือด','อ่อนแรงซีกเดียว','ไข้ 39 °C ร่วมกับปัสสาวะแสบขัด']},
+ AH3:{pb:'anaphylaxis',alt:['sepsis','bronchospasm','acs'],cue:['เริ่มยาปฏิชีวนะ IV ได้ 10 นาที','ผื่นนูนแดงทั้งตัว ปากบวม เสียงวี้ด','SBP 78 ชีพจร 136 จะเป็นลม'],no:['ไข้สูงหนาวสั่นมา 2 วัน','เจ็บแน่นหน้าอกร้าวแขนซ้าย','ถ่ายเหลวหลายครั้ง']},
+ AH4:{pb:'hemorrhage',alt:['acs','sepsis','pe'],cue:['หลังสวนหัวใจทางขาหนีบขวา 4 ชั่วโมง ขาหนีบบวมโตขึ้น','ปวดหลังและท้องน้อย (สงสัยเลือดออกหลังช่องท้อง)','SBP 86 ชีพจร 112 เหงื่อออก'],no:['เจ็บหน้าอกแบบเดิมก่อนทำหัตถการ','ไข้หนาวสั่น','น่องบวมข้างเดียว']},
+ AH5:{pb:'sepsis',alt:['hemorrhage','dehydration','anaphylaxis'],cue:['ได้เคมีบำบัด 10 วันก่อน เม็ดเลือดขาวต่ำมาก','ไข้ 39.1 °C หนาวสั่น','SBP 86 ชีพจร 126 ปลายมือเท้าเย็น'],no:['ผื่นนูนแดงหลังได้ยา','อาเจียนเป็นเลือด','อ่อนแรงซีกเดียว']},
+};
+function rsnFor(cs){ const R=RSN[cs.id]; if(!R) return null;
+  if(!C.rsn){ const pick=k=>({k,t:PB[k][0]}), cons=k=>({k,t:PB[k][1]});
+    const alts=R.alt.slice(0,3);
+    // consequences must be clearly different from the right one: draw them from other body systems
+    const cat=k=>PB_CAT[k]||'x', mine=cat(R.pb); let c3=alts.filter(k=>cat(k)!==mine);
+    for(const k of shuffle(Object.keys(PB))){ if(c3.length>=3) break; if(k!==R.pb&&cat(k)!==mine&&!c3.includes(k)&&!c3.some(x=>cat(x)===cat(k))) c3.push(k); }
+    for(const k of shuffle(Object.keys(PB))){ if(c3.length>=3) break; if(k!==R.pb&&cat(k)!==mine&&!c3.includes(k)) c3.push(k); }
+    C.rsn={q1:shuffle([pick(R.pb),...alts.map(pick)]), q2:shuffle([...R.cue.map((t,i)=>({k:'c'+i,t,ok:1})),...R.no.map((t,i)=>({k:'n'+i,t,ok:0}))]), q3:shuffle([cons(R.pb),...c3.slice(0,3).map(cons)]),
+      a1:null,a2:new Set(),a3:null,graded:false}; }
+  return C.rsn; }
+rReason=function(){
+  const cs=C.cs, R=RSN[cs.id], Q=rsnFor(cs); if(!Q) return;
+  $('#cpHead').innerHTML=head('ขั้นที่ 3 · วิเคราะห์ปัญหาผู้ป่วย');
+  const g=Q.graded, ex=S&&S.exam;
+  const mark=(ok,picked)=>!g||ex?'':ok?'right':picked?'wrong':'';
+  const q=(n,title,sub,body)=>`<div class="rq"><div class="rq-h"><span class="rq-n">${n}</span><div><b>${title}</b>${sub?`<div class="muted" style="font-size:12.5px">${sub}</div>`:''}</div></div>${body}</div>`;
+  $('#cpBody').innerHTML=`<p style="margin:0">คิดเป็นลำดับเหมือนการประเมินจริง: ปัญหาคืออะไร → อะไรบอกเรา → ถ้าไม่แก้จะเกิดอะไร</p>
+   ${q(1,'ปัญหาหลักของผู้ป่วยรายนี้คืออะไร','เลือก 1 ข้อที่อธิบายได้ดีที่สุด',`<div class="rq-opts">${Q.q1.map(o=>`<button class="choice ${mark(o.k===R.pb,Q.a1===o.k)}" data-q1="${o.k}" aria-pressed="${Q.a1===o.k}" ${g?'disabled':''}>${esc(o.t)}</button>`).join('')}</div>`)}
+   ${q(2,'ข้อมูลใดสนับสนุนปัญหานี้','เลือกทุกข้อที่พบในผู้ป่วยรายนี้และสนับสนุนปัญหาที่เลือก',`<div class="rq-opts">${Q.q2.map(o=>`<label class="cb ${!g||ex?'':o.ok?(Q.a2.has(o.k)?'right':'miss'):(Q.a2.has(o.k)?'wrong':'')}" data-k="${o.k}"><input type="checkbox" ${Q.a2.has(o.k)?'checked':''} ${g?'disabled':''}><span>${esc(o.t)}</span></label>`).join('')}</div>`)}
+   ${q(3,'ถ้าไม่ได้รับการแก้ไข สิ่งที่น่ากังวลที่สุดคือ','เลือก 1 ข้อ',`<div class="rq-opts">${Q.q3.map(o=>`<button class="choice ${mark(o.k===R.pb,Q.a3===o.k)}" data-q3="${o.k}" aria-pressed="${Q.a3===o.k}" ${g?'disabled':''}>${esc(o.t)}</button>`).join('')}</div>`)}
+   <div id="rFb"></div>${hint('เริ่มจากสิ่งที่คุกคามชีวิตก่อน (A-B-C-D) แล้วใช้ข้อมูลจากเรื่องเล่า ประวัติ และสัญญาณชีพประกอบกัน คะแนน EWS ต่ำไม่ได้แปลว่าปลอดภัยเสมอ')}`;
+  actions('');
+  if(!g){
+    $$('#cpBody [data-q1]').forEach(b=>b.onclick=()=>{ Q.a1=b.dataset.q1; rReason(); });
+    $$('#cpBody [data-q3]').forEach(b=>b.onclick=()=>{ Q.a3=b.dataset.q3; rReason(); });
+    $$('#cpBody label.cb input').forEach(i=>i.onchange=e=>{ const k=i.closest('label').dataset.k; e.target.checked?Q.a2.add(k):Q.a2.delete(k); });
+    setFoot([{id:'bC',t:'ยืนยันการวิเคราะห์',cls:'primary',dis:!Q.a1||!Q.a3||!Q.a2.size,on:()=>{ Q.graded=true; C.rsGraded=true; gradeReason(); rReason(); }}]); return; }
+  const r=C.rsnRes;
+  $('#rFb').innerHTML=`<div class="fb ${r.all?'ok':'bad'}"><b>ปัญหาหลัก ${r.q1?'✓':'✗'} · ข้อมูลสนับสนุน ${r.hit}/${R.cue.length}${r.fp?` (เลือกผิด ${r.fp})`:''} · ผลที่ตามมา ${r.q3?'✓':'✗'}</b>
+    <div style="margin-top:6px;font-size:13px">${esc(PB[R.pb][0])} → ${esc(PB[R.pb][1])}</div>
+    ${cs.why?`<details style="margin-top:6px"><summary>ข้อคิดทางคลินิกจากเคสนี้</summary><ul style="margin:6px 0 0 18px;padding:0">${cs.why.filter(w=>w[0]).map(w=>`<li>${esc(w[1])}</li>`).join('')}</ul></details>`:''}</div>`;
+  setFoot([{id:'bN',t:'เลือก Management protocol →',cls:'primary',on:()=>go('tier')}]);
+};
+gradeReason=function(){
+  const cs=C.cs, R=RSN[cs.id], Q=C.rsn; if(!R||!Q) return;
+  const q1=Q.a1===R.pb, q3=Q.a3===R.pb; let hit=0, fp=0;
+  Q.q2.forEach(o=>{ const s=Q.a2.has(o.k); if(o.ok&&s) hit++; if(!o.ok&&s) fp++; itm('reason:'+o.k,o.ok?s:!s,o.ok?'o':'c'); });
+  itm('reason:prob',q1,'o'); itm('reason:cons',q3,'o');
+  if(!q1) addErr('REASON:PROB'); if(hit<R.cue.length) addErr('REASON:o'); if(fp) addErr('REASON:c'); if(!q3) addErr('REASON:CONS');
+  const p2=Math.max(0,4*(hit-fp)/R.cue.length);
+  C.dom.reason=(q1?4:0)+p2+(q3?2:0); C.rsnRes={q1,q3,hit,fp,all:q1&&q3&&hit===R.cue.length&&!fp}; updScore();
+};
+{ const _e=errLabel; errLabel=function(c){ return c==='REASON:PROB'?'ระบุปัญหาหลักของผู้ป่วยไม่ถูกต้อง':c==='REASON:CONS'?'คาดการณ์ผลที่ตามมาหากไม่แก้ไขไม่ถูกต้อง':_e(c); }; }
+{ const _il=itemLabel; itemLabel=function(caseId,key){ const [d,rest]=key.split(':'); const R=RSN[caseId];
+    if(d==='reason'&&R){ if(rest==='prob') return 'ปัญหาหลัก: '+PB[R.pb][0]; if(rest==='cons') return 'ผลที่ตามมา: '+PB[R.pb][1];
+      if(/^c\d/.test(rest)) return 'ข้อมูลสนับสนุน: '+(R.cue[+rest.slice(1)]||''); if(/^n\d/.test(rest)) return 'ไม่สนับสนุน/ไม่พบ: '+(R.no[+rest.slice(1)]||''); }
+    return _il(caseId,key); }; }
+{ const _sc=startCase; startCase=function(){ _sc(); if(C) C.rsn=null; }; }
+{ const st=document.createElement('style'); st.textContent=`.rq{display:grid;gap:8px;padding:12px;border-radius:12px;background:#0a1828;border:1px solid var(--line)}
+.rq-h{display:flex;gap:10px;align-items:flex-start}.rq-n{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--teal);color:#04222a;font-weight:700;font-size:13px}
+.rq-opts{display:grid;gap:6px}.rq .choice{font-size:13.5px;padding:9px 11px}`; document.head.appendChild(st); }
+/* ================================================================
+   INTERVENTION TRAY — real equipment and procedures, grouped like a ward.
+   · Tabs: ทางเดินหายใจ/O₂ · จัดท่า · ไหลเวียน/IV · ประสาท/น้ำตาล · เฉพาะกลุ่ม (OB/ทารก) · เตรียมทีม/สื่อสาร
+   · Items with choices (O₂ device & flow, suction, IV cath & fluid, DTX site, BVM, bleeding control)
+     open a picker; each choice is rated for THIS patient (1 good · .5 acceptable · 0 wrong).
+   · A weaker choice gives a weaker physiological response; a wrong one can harm.
+   ================================================================ */
+const TRAY_LABEL={
+ o2:'ให้ออกซิเจน (เลือกอุปกรณ์และอัตราการไหล)', o2copd:'ให้ออกซิเจน (เลือกอุปกรณ์และอัตราการไหล)', neoo2:'ให้ออกซิเจน (เลือกอุปกรณ์และอัตราการไหล)',
+ suction:'ดูดเสมหะ (Suction)', bvm:'ช่วยหายใจด้วย Ambu bag (BVM)', iv:'เปิดเส้นเลือด IV (เลือกขนาดเข็มและสารน้ำ)', dtx:'เจาะ DTX (POCT glucose)', bleed:'ห้ามเลือด',
+ monitor:'Bedside monitor: ECG 3 leads · NIBP · SpO₂ probe', ekg:'ECG 12 leads ข้างเตียง', cart:'Emergency cart + Defibrillator มาข้างเตียง',
+ chart:'เตรียม IPD record · MAR · ผล lab ให้ทีม ERT', stroke:'Stroke alert (กด 6) · บันทึกเวลา last seen normal', npo:'NPO · ติดป้ายงดน้ำงดอาหาร',
+ airwayopen:'Head tilt–chin lift / Jaw thrust', neb:'Nebulizer: Salbutamol ตามแผนการรักษา (ต่อ O₂ 6–8 L/min)',
+ stopiv:'Clamp สาย / หยุด infusion pump ที่ให้ IV fluid', stopdrug:'หยุดยา/PCA ที่สงสัย เก็บขวดยาและสายไว้ให้ทีม',
+ bloodloss:'ประเมินปริมาณเลือดที่ออก (เก็บภาชนะ/ชั่งผ้าก๊อซ)', upright:'High Fowler 90° นั่งห้อยขาข้างเตียง', position:'Semi-Fowler 30–45°',
+ lie:'นอนราบ ยกปลายเท้าสูง (passive leg raise)', hob30:'ศีรษะสูง 30° ศีรษะและคออยู่แนวตรง', airway:'Recovery position นอนตะแคง ป้องกันสำลัก/บาดเจ็บ',
+ lut:'Left lateral tilt ตะแคงซ้าย 15–30°', fetal:'On fetal monitor (CTG) ต่อเนื่อง', orsb:'Stand by OR · ส่งต่อข้อมูลทีม OR และ NICU',
+ warm:'Radiant warmer · หมวกผ้า · ผ้าห่อตัวอุ่น', unwrap:'คลายผ้าห่อตัว ปรับอุณหภูมิห้อง วัดซ้ำใน 30 นาที', transfer:'เตรียม transport incubator + O₂ + pulse oximeter ไป NICU',
+ vs30:'วัด V/S + SpO₂ ซ้ำทุก 30 นาที', md:'โทรรายงานแพทย์เจ้าของไข้ / แพทย์เวร (SBAR)', obmd:'โทรรายงานแพทย์เวรสูติ-นรีเวช ให้มาประเมินด่วน',
+ family:'แจ้งญาติ: อาการเปลี่ยนแปลงและทีมกำลังมา', reportrn:'ตาม RN ให้มาประเมินซ้ำทันที',
+};
+const PICK={
+ o2dev:{keys:['o2','o2copd','neoo2'],title:'เลือกอุปกรณ์ให้ออกซิเจน',opts:[
+   {id:'nc12',t:'Nasal cannula 1–2 L/min',pop:'ad'},{id:'nc35',t:'Nasal cannula 3–5 L/min',pop:'ad'},{id:'sm',t:'Simple mask 6–10 L/min',pop:'ad'},
+   {id:'nrb',t:'Mask with reservoir bag 10–15 L/min',pop:'ad'},{id:'vent',t:'Venturi mask FiO₂ 28% (4 L/min)',pop:'ad'},
+   {id:'nff',t:'O₂ free-flow / O₂ box 5 L/min (ทารก)',pop:'neo'},{id:'nnc',t:'Low-flow nasal cannula ทารก 0.5–1 L/min',pop:'neo'},{id:'nnrb',t:'Mask with reservoir bag 10 L/min',pop:'neo'}],
+  q(id,cs,k){ const v=cs.v, sp=v.spo2;
+   if(k==='neoo2') return id==='nnrb'?[.5,'mask ชนิดผู้ใหญ่ไม่พอดีกับทารก ใช้ free-flow หรือ low-flow cannula']:[1,''];
+   if(k==='o2copd') return id==='nc12'||id==='vent'?[1,'']:id==='nc35'?[.5,'ผู้ป่วย COPD ควรเริ่มที่ต่ำ ปรับให้ SpO₂ 92–95%']:[0,'O₂ ความเข้มข้นสูงในผู้ป่วย COPD เสี่ยง CO₂ คั่ง ซึมลง'];
+   const severe=sp<90||v.sbp<90||(cs.p.ageYears<15&&sp<94)||/anaph|AH3|AR3/.test(cs.id);
+   if(severe) return id==='nrb'?[1,'']:id==='sm'||id==='nc35'||id==='vent'?[.5,'SpO₂ ต่ำมาก/ช็อก ควรใช้ mask with reservoir bag 10–15 L/min ก่อน แล้วค่อยปรับลด']:[0,'อัตราการไหลต่ำเกินไปสำหรับภาวะพร่องออกซิเจนรุนแรง'];
+   if(sp<95) return id==='nc12'?[.5,'อาจไม่พอ ปรับเพิ่มให้ SpO₂ > 95%']:[1,''];
+   return id==='nc12'||id==='nc35'?[1,'']:[.5,'SpO₂ ยังไม่ต่ำ เริ่มด้วย cannula อัตราต่ำแล้วปรับตามเป้าหมาย']; }},
+ suction:{keys:['suction'],title:'เลือกวิธีดูดเสมหะ',opts:[
+   {id:'yk',t:'Yankauer ดูดในช่องปาก แรงดัน 100–150 mmHg',pop:'ad'},{id:'fr',t:'สาย suction 12–14 Fr ทางปาก/จมูก ครั้งละไม่เกิน 10–15 วินาที',pop:'ad'},
+   {id:'long',t:'ดูดต่อเนื่องจนเสมหะหมด ครั้งละประมาณ 30 วินาที',pop:'ad'},{id:'neo',t:'สาย suction 6–8 Fr ดูดปากก่อนจมูก แรงดัน 60–100 mmHg',pop:'neo'},{id:'neohi',t:'สาย suction 14 Fr แรงดัน 200 mmHg',pop:'neo'}],
+  q(id){ return id==='yk'||id==='fr'||id==='neo'?[1,'']:id==='long'?[0,'ดูดนานเกินไปทำให้ SpO₂ ตก หัวใจเต้นช้า ควรดูดครั้งละ ≤ 10–15 วินาที แล้วให้ O₂']:[0,'สายใหญ่และแรงดันสูงเกินไปสำหรับทารก ทำให้เยื่อบุบาดเจ็บ']; }},
+ iv:{keys:['iv'],title:'เลือกขนาด IV catheter และสารน้ำ',opts:[
+   {id:'g18',t:'IV cath 18G + NSS 0.9% 1,000 ml (เตรียมตามแผนการรักษา)',pop:'ad'},{id:'g20',t:'IV cath 20G + NSS 0.9% keep vein open',pop:'ad'},
+   {id:'g24',t:'IV cath 24G + NSS 0.9% keep vein open',pop:'ad'},{id:'d5w',t:'IV cath 20G + 5% D/W 1,000 ml หยดเร็ว (free flow)',pop:'ad'},
+   {id:'p24',t:'IV cath 22–24G + NSS 0.9% ตามแผนการรักษา',pop:'ped'},{id:'p18',t:'IV cath 18G + NSS 0.9% 1,000 ml',pop:'ped'}],
+  q(id,cs){ const ped=cs.p.ageYears<15, shock=cs.v.sbp<90||cs.sys==='shock';
+   if(ped) return id==='p24'?[1,'']:[0,'เข็มใหญ่เกินไปสำหรับเด็ก เลือกขนาด 22–24G'];
+   if(id==='d5w') return [0,'5% D/W หยดเร็วไม่ใช่สารน้ำทดแทน และเพิ่มน้ำตาล/สมองบวม ควรใช้ NSS ตามแผนการรักษา'];
+   if(shock) return id==='g18'?[1,'']:id==='g20'?[.5,'ภาวะช็อก/เสียเลือดควรใช้เข็มใหญ่ 18G เพื่อให้สารน้ำได้เร็ว']:[0,'เข็ม 24G เล็กเกินไป ให้สารน้ำหรือเลือดได้ช้า'];
+   return id==='g24'?[.5,'เข็ม 24G เล็ก ให้ยาฉุกเฉิน/สารน้ำได้ช้า ผู้ใหญ่ควรใช้ 18–20G']:[1,'']; }},
+ dtx:{keys:['dtx'],title:'เลือกตำแหน่งเจาะ DTX',opts:[
+   {id:'fin',t:'เจาะปลายนิ้วด้านข้าง (POCT glucose)',pop:'ad'},{id:'ivarm',t:'เจาะจากแขนข้างที่กำลังให้ IV dextrose',pop:'ad'},
+   {id:'heel',t:'เจาะส้นเท้าด้านข้าง (heel prick)',pop:'neo'},{id:'nfin',t:'เจาะปลายนิ้วทารก',pop:'neo'}],
+  q(id){ return id==='fin'||id==='heel'?[1,'']:id==='ivarm'?[0,'ค่าที่ได้สูงเกินจริงจากสารน้ำที่มีน้ำตาล ให้เจาะแขนอีกข้าง']:[0,'ทารกแรกเกิดควรเจาะส้นเท้าด้านข้าง']; }},
+ bvm:{keys:['bvm'],title:'เลือกวิธีช่วยหายใจด้วย Ambu bag',opts:[
+   {id:'ok',t:'Ambu bag + mask แนบสนิท (E-C clamp) + reservoir ต่อ O₂ 15 L/min บีบ 1 ครั้งทุก 6 วินาที'},
+   {id:'fast',t:'Ambu bag ไม่ต่อ O₂ บีบเร็วและแรง 30 ครั้ง/นาที'},{id:'loose',t:'Ambu bag ต่อ O₂ แต่จับ mask หลวม ลมรั่วด้านข้าง'}],
+  q(id){ return id==='ok'?[1,'']:id==='fast'?[0,'บีบเร็วแรงทำให้ลมเข้ากระเพาะ สำลัก และลดเลือดกลับหัวใจ ไม่ต่อ O₂ ทำให้ได้ O₂ น้อย']:[.5,'mask ไม่แนบ ลมรั่ว ใช้เทคนิค E-C clamp หรือให้ผู้ช่วยจับ mask สองมือ']; }},
+ bleed:{keys:['bleed'],title:'เลือกวิธีห้ามเลือด',opts:[
+   {id:'press',t:'กดตรงด้วยผ้าก๊อซหนา ๆ ต่อเนื่อง 10 นาที ไม่เปิดดูระหว่างกด'},{id:'peek',t:'กดผ้าก๊อซแล้วเปิดดูทุก 1 นาที'},{id:'tq',t:'รัด tourniquet เหนือแผลทันที'}],
+  q(id,cs){ return id==='press'?[1,'']:id==='peek'?[.5,'การเปิดดูบ่อยทำให้ลิ่มเลือดหลุด ควรกดต่อเนื่อง']:[0,cs.id==='AH4'?'ตำแหน่งขาหนีบหลังสวนหัวใจใช้การกดเหนือจุดเจาะ ไม่ใช้ tourniquet':'tourniquet ใช้กับแขนขาที่เลือดพุ่งรุนแรงเท่านั้น ไม่ใช่แผลผ่าตัด']; }},
+};
+const CHANGEABLE=new Set(['o2','o2copd','neoo2']);   // O₂ can be stepped up / changed after it is started
+const O2FLOW={nc12:2,nc35:4,sm:8,nrb:12,vent:4,nff:5,nnc:1,nnrb:10};
+const PICK_OF={}; Object.entries(PICK).forEach(([g,P])=>P.keys.forEach(k=>PICK_OF[k]=g));
+const TRAY_TABS=[['air','Airway / O₂'],['pos','จัดท่า'],['circ','Circulation / IV'],['neuro','Neuro / DTX'],['spec','เฉพาะกลุ่ม'],['prep','ทีม / สื่อสาร']];
+function trayItems(cs){
+  const pop=critPop(cs.p), neo=pop==='neo', ob=pop==='ob', has=k=>[...cs.care.req,...cs.care.rec,...cs.care.bad].includes(k);
+  const o2k=neo?'neoo2':has('o2copd')?'o2copd':'o2';
+  const genBad=neo?['wait','leave','bath','oralfeed']:['wait','leave','sedate','feed'];
+  const caseBad=cs.care.bad.filter(k=>!genBad.includes(k));
+  const T={air:[o2k,'suction',...(neo?[]:['airwayopen']),'bvm',...(neo?[]:['neb'])],
+   pos:neo?['airwayopen']:['position','upright','lie','hob30','airway',...(ob?['lut']:[])],
+   circ:['monitor',...(neo?[]:['ekg','iv','stopiv','stopdrug','bleed','bloodloss'])],
+   neuro:['dtx',...(neo?[]:['stroke','npo'])],
+   spec:neo?['warm','unwrap','transfer','vs30']:ob?['fetal','orsb','obmd']:[],
+   prep:['cart','chart',...(neo?[]:['md']),'family',...(GS.player.role==='NA'?['reportrn']:[])]};
+  // case-specific and generic unsafe options sit where a nurse would meet them
+  const where={ngfeed:'air',drinkwash:'air',feed:'air',oralfeed:'air',carotid:'circ',fluidfast:'circ',contdrug:'circ',drink:'circ',restrain:'neuro',sedate:'neuro',sl:'neuro',walk:'prep',wait:'prep',leave:'prep',bath:'spec',lie:'pos'};
+  [...caseBad,...genBad].forEach(k=>{ const t=where[k]||'prep'; if(!T[t].includes(k)) T[t].push(k); });
+  // make sure every required / recommended action is reachable
+  [...cs.care.req,...cs.care.rec].forEach(k=>{ if(!Object.values(T).some(a=>a.includes(k))) (T.spec.length||neo||ob?T.spec:T.prep).push(k); });
+  if(!T.spec.length) delete T.spec;
+  return T;
+}
+function pickOpts(g,cs){ const tag=critPop(cs.p)==='neo'?'neo':cs.p.ageYears<15?'ped':'ad', O=PICK[g].opts, hasPed=O.some(o=>o.pop==='ped');
+  return O.filter(o=>!o.pop||o.pop===tag||(tag==='ped'&&!hasPed&&o.pop==='ad')); }
+function trayLabel(k){ return TRAY_LABEL[k]||ACTIONS[k]?.t||k; }
+function renderTray(){
+  if(!C||(C.phase!=='care'&&C.phase!=='first')) return; const cs=C.cs, na=GS.player.role==='NA', ex=S&&S.exam;
+  if(!C.tray){ C.tray=trayItems(cs); C.careList=[...new Set(Object.values(C.tray).flat())]; C.trayTab=C.tray.assess?'assess':'air'; C.variant={}; }
+  const T=C.tray, tabs=TRAY_TABS.filter(([k])=>T[k]&&T[k].length), cur=T[C.trayTab]?C.trayTab:tabs[0][0];
+  const lock=C.arrived||C.busy;
+  const item=k=>{ const a=ACTIONS[k]; if(!a) return ''; const was=C.done.has(k), chg=CHANGEABLE.has(k)&&was, d=was&&k!=='revs'&&!chg, g=PICK_OF[k], open=C.pickOpen===k&&!d&&!lock;
+    const pv=was&&C.variant[k]?PICK[g].opts.find(o=>o.id===C.variant[k]):null;
+    return `<button class="act ${d?(!ex&&isBad(k)?'bad':'done'):chg?'done':''} ${open?'open':''}" data-tk="${k}" ${d||lock?'disabled':''}><span class="ic">${a.min<1?'½':a.min}′</span><span>${esc(trayLabel(k))}${pv?`<small>✓ ใช้อยู่: ${esc(pv.t)}</small>`:''}${g&&!d?` <small>${chg?'เปลี่ยน / ปรับอุปกรณ์ ▸':'เลือกอุปกรณ์ / วิธี ▸'}</small>`:''}${na&&a.rn?' <small>(หน้าที่ RN)</small>':''}</span></button>
+      ${open?`<div class="pick">${pickOpts(g,cs).map(o=>`<button class="pk" data-pv="${o.id}">${esc(o.t)}</button>`).join('')}<button class="pk ghost" data-pv="">ยกเลิก</button></div>`:''}`; };
+  actions(`<div class="eyebrow">อุปกรณ์และการพยาบาล · เลือกให้ตรงกับผู้ป่วยรายนี้</div>
+    ${(T.pin||[]).filter(k=>k!=='recall'||C.worse).map(item).join('')}
+    <div class="tray-tabs">${tabs.map(([k,l])=>`<button class="tt ${k===cur?'on':''}" data-tt="${k}">${l}</button>`).join('')}</div>
+    <div class="tray-list">${T[cur].map(item).join('')}</div>`);
+  $$('#actionPanel [data-tt]').forEach(b=>b.onclick=()=>{ C.trayTab=b.dataset.tt; C.pickOpen=null; renderTray(); });
+  $$('#actionPanel [data-tk]').forEach(b=>b.onclick=()=>{ const k=b.dataset.tk; if(PICK_OF[k]){ C.pickOpen=C.pickOpen===k?null:k; renderTray(); return; } C.fxLabel=null; doCare(k); });
+  $$('#actionPanel [data-pv]').forEach(b=>b.onclick=()=>{ const k=C.pickOpen, id=b.dataset.pv; C.pickOpen=null; if(!id){ renderTray(); return; }
+    const o=PICK[PICK_OF[k]].opts.find(x=>x.id===id); C.variant[k]=id; C.fxLabel=o.t; doCare(k); });
+}
+{ const _r=rCare; rCare=function(){ _r(); const tl=$('#cpBody .timeline'); if(tl&&C.careOrder.length){ tl.innerHTML=C.careOrder.map(o=>{ const g=PICK_OF[o.k], v=g&&C.variant&&C.variant[o.k]?PICK[g].opts.find(x=>x.id===C.variant[o.k]):null;
+      return `<div>${fmtT(o.t*60)}  ${esc(v?trayLabel(o.k).replace(/\s*\(เลือก.*\)$/,'')+': '+v.t:trayLabel(o.k))}</div>`; }).join(''); } renderTray(); }; }
+{ const _sc=startCase; startCase=function(){ _sc(); if(C){ C.tray=null; C.variant={}; C.pickOpen=null; } }; }
+function variantQ(k){ const id=C.variant&&C.variant[k]; if(!id) return null; const g=PICK_OF[k]; return PICK[g].q(id,C.cs,k); }
+/* weaker device → weaker response; wrong device → harm shown in the result */
+Object.keys(PICK_OF).forEach(k=>{ const d=FXDEF[k]; if(!d) return; const _res=d.res;
+  d.res=cs=>{ const r=Object.assign({},_res?_res(cs):{}); if(CHANGEABLE.has(k)&&C.variant&&C.variant[k]){ const v=vitShow(); v.o2=true; v.o2L=O2FLOW[C.variant[k]]||v.o2L; GS.measured.add('spo2'); }
+    const vq=variantQ(k); if(!vq||vq[0]>=1) return r; const [q,note]=vq; r.v=Object.assign({},r.v||{});
+    if(k==='suction'&&q===0){ r.v={spo2:v=>v.spo2-4,hr:v=>v.hr-10}; r.bad=note; return r; }
+    if(r.v.spo2){ const f=r.v.spo2; r.v.spo2=v=>{ const full=typeof f==='function'?f(v):f; return q>=.5?Math.min(full,v.spo2+2):(k==='o2copd'?Math.min(99,v.spo2+6):v.spo2+1); }; }
+    if(q===0) r.bad=note; else r.t=[r.t,'ยังไม่เหมาะที่สุด: '+note].filter(Boolean).join(' · ');
+    return r; }; });
+{ const _fc=fxCaption; fxCaption=function(title,res,kind){ if(C&&C.fxLabel){ title=C.fxLabel; C.fxLabel=null; } return _fc(title,res,kind); }; }
+{ const _g=gradeCare; gradeCare=function(){ _g(); let pen=0;
+    Object.keys(C.variant||{}).forEach(k=>{ if(!C.done.has(k)) return; const [q,note]=variantQ(k)||[1,'']; itm('dev:'+k,q>=1,'o'); if(q<1){ pen+=(1-q)*3; addErr('DEVICE:'+k+':'+C.variant[k]); } });
+    if(pen){ C.dom.care=Math.max(0,C.dom.care-pen); updScore(); } }; }
+{ const _e=errLabel; errLabel=function(c){ if(c.startsWith('DEVICE:')){ const [,k,id]=c.split(':'); const g=PICK_OF[k]; const o=g&&PICK[g].opts.find(x=>x.id===id);
+      const note=g&&C&&C.cs?(PICK[g].q(id,C.cs,k)[1]||''):''; return `เลือกอุปกรณ์/วิธีไม่เหมาะสม: ${o?o.t:k}${note?' — '+note:''}`; } return _e(c); }; }
+{ const _il=itemLabel; itemLabel=function(caseId,key){ if(key.startsWith('dev:')) return 'เลือกอุปกรณ์ถูกต้อง: '+trayLabel(key.slice(4)); return _il(caseId,key); }; }
+{ const st=document.createElement('style'); st.textContent=`
+.tray-tabs{display:flex;flex-wrap:wrap;gap:4px}.tt{font-size:12px;padding:5px 9px;border-radius:999px;border:1px solid var(--line);background:#0b1a2e;color:var(--muted)}
+.tt.on{background:var(--teal);color:#04222a;border-color:var(--teal);font-weight:600}
+.tray-list{display:grid;gap:6px}.act.open{border-color:var(--gold)}
+.pick{display:grid;gap:5px;padding:8px;border-radius:10px;border:1px dashed var(--gold);background:rgba(245,190,70,.06);margin-top:-2px}
+.pk{text-align:left;font-size:12.5px;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:#081626;line-height:1.35}.pk:hover{border-color:var(--gold)}.pk.ghost{color:var(--muted);text-align:center}`; document.head.appendChild(st); }
+/* ================================================================
+   NATURAL VOICE · LIVING PATIENT · CALL FOR HELP
+   ================================================================ */
+
+/* ---------- 1) natural Thai speech: phrase rhythm, turn-taking, best voice ---------- */
+const TTS_FIX=[[/\bERT\b/g,'อี อาร์ ที'],[/\bNICU\b/g,'เอ็น ไอ ซี ยู'],[/\bICU\b/g,'ไอ ซี ยู'],[/\bSpO₂|SpO2/g,'ค่าออกซิเจนปลายนิ้ว'],[/O₂|O2/g,'ออกซิเจน'],
+  [/\bBP\b/g,'ความดัน'],[/\bHR\b/g,'ชีพจร'],[/\bRR\b/g,'อัตราการหายใจ'],[/\bV\/S\b/g,'สัญญาณชีพ'],[/\bMEWS\b/g,'มิวส์'],[/\bPEWS\b/g,'พิวส์'],[/\bNEWS\b/g,'นิวส์'],[/\bMEOWS\b/g,'มีโอวส์'],
+  [/\bDTX\b/g,'ดีทีเอ็กซ์'],[/\bIV\b/g,'ไอวี'],[/\bECG\b|\bEKG\b/g,'อีซีจี'],[/\bSBAR\b/g,'เอสบาร์'],[/(\d+)\s*\/\s*(\d+)/g,'$1 ทับ $2'],[/(\d)\s*%/g,'$1 เปอร์เซ็นต์'],
+  [/°C/g,' องศา'],[/\bmmHg\b/g,''],[/L\/min/g,'ลิตรต่อนาที'],[/\b3458\b/g,'สาม สี่ ห้า แปด'],[/\b(18[0-9]{2})\b/g,m=>m.split('').join(' ')],[/[·•|]/g,', '],[/\s{2,}/g,' ']];
+function ttsNorm(t){ let s=String(t||''); TTS_FIX.forEach(([a,b])=>s=s.replace(a,b)); return s.trim(); }
+function ttsPhrases(t){ const words=ttsNorm(t).split(/\s+/).filter(Boolean), out=[]; let cur='';
+  const endS=w=>/(ค่ะ|ครับ|คะ|นะ|เลย|ด้วย)[,.!?]?$|[.!?]$/.test(w);
+  for(const w of words){ const nx=cur?cur+' '+w:w; if(cur&&nx.replace(/\s/g,'').length>34){ out.push({t:cur,end:false}); cur=w; } else cur=nx; if(endS(w)||/,$/.test(w)){ out.push({t:cur.replace(/,$/,''),end:endS(w)}); cur=''; } }
+  if(cur) out.push({t:cur,end:true}); return out; }
+function voiceRank(v){ const n=v.name||''; return (/natural|neural|online/i.test(n)?6:0)+(/google/i.test(n)?3:0)+(/premwadee|niwat|achara|pattara/i.test(n)?1:0)+(v.localService?0:1); }
+voiceFor=function(g){ const vs=VOICES.slice().sort((a,b)=>voiceRank(b)-voiceRank(a)); const m=vs.find(v=>MALE_V.test(v.name)), f=vs.find(v=>FEMALE_V.test(v.name)&&!MALE_V.test(v.name));
+  return g==='M'?{v:m||vs[0]||null,pitch:m?1:.62}:{v:f||vs[0]||null,pitch:f?1.04:1.2}; };
+const SPK={player:()=>({g:playerGender(),rate:1,dp:0}),md:()=>({g:'M',rate:.98,dp:-.06}),rn:()=>({g:'F',rate:1.02,dp:.06}),rn2:()=>({g:'M',rate:1,dp:.04}),
+  op:()=>({g:'F',rate:.9,dp:-.02}),pt:()=>({g:(C&&C.cs.p.sex)||'M',rate:.86,dp:(C&&C.cs.p.ageYears>65)?-.1:0}),help:()=>({g:playerGender()==='M'?'F':'M',rate:1.03,dp:.03}),fam:()=>({g:'F',rate:.95,dp:.02})};
+const SPQ={q:[],busy:false,gen:0};
+function sayUtter(text,o){ return new Promise(res=>{ try{ const V=voiceFor(o.g); const u=new SpeechSynthesisUtterance(text); u.lang='th-TH'; if(V.v) u.voice=V.v;
+    u.rate=Math.min(1.6,Math.max(.6,(+o.rate||1)*(0.97+Math.random()*.06))); u.pitch=Math.min(2,Math.max(.1,(+V.pitch||1)+(+o.dp||0)+(o.last?-.04:0)+(Math.random()-.5)*.04)); u.volume=o.vol??1;
+    let done=false; const fin=()=>{ if(!done){ done=true; res(); } }; u.onend=u.onerror=fin; try{ speechSynthesis.resume(); }catch(e){} speechSynthesis.speak(u); setTimeout(fin,1500+text.length*140); }catch(e){ res(); } }); }
+async function spqRun(){ if(SPQ.busy) return; SPQ.busy=true; const gen=SPQ.gen;
+  while(SPQ.q.length&&gen===SPQ.gen){ const it=SPQ.q.shift(); const o=Object.assign({},(SPK[it.who]||SPK.player)(),it.opt);
+    const ph=ttsPhrases(it.text); for(let i=0;i<ph.length&&gen===SPQ.gen;i++){ await sayUtter(ph[i].t,Object.assign({},o,{last:i===ph.length-1})); await sleep(ph[i].end?260:90); }
+    it.done(); if(SPQ.q.length) await sleep(it.who!==SPQ.q[0].who?420:180); }
+  SPQ.busy=false; }
+speak=function(t,opt={}){ if(!GS.sound||!('speechSynthesis' in window)||!t) return Promise.resolve();
+  if(!opt.who&&/^ประกาศ/.test(t)) opt=Object.assign({},opt,{who:'op'});
+  if(!opt.who&&/^ทีม.*มาแล้ว/.test(t)&&C){ const cs=C.cs; t=`${cs.p.name} อายุ ${cs.p.ageTxt} ${cs.p.dx.split(',')[0]} ตอนนี้${cs.problem}${polite()}`; }   // the bedside nurse starts the handover when asked
+  if(!VOICES.length) loadVoices();
+  if(opt.now){ SPQ.gen++; SPQ.q.forEach(x=>x.done()); SPQ.q=[]; try{ speechSynthesis.cancel(); }catch(e){} SPQ.busy=false; }
+  if(SPQ.q.length>3) SPQ.q.splice(0,SPQ.q.length-3).forEach(x=>x.done());
+  return new Promise(done=>{ const ov={}; if(opt.rate>0) ov.rate=opt.rate; if(opt.g) ov.g=opt.g; SPQ.q.push({text:t,who:opt.who||'player',opt:ov,done}); spqRun(); }); };
+function sayAs(who,t,opt={}){ return speak(t,Object.assign({},opt,{who})); }
+// stop talking when leaving the ward
+{ const _sh=show; show=function(id){ if(id!=='scr-game'&&SPQ.q.length){ SPQ.gen++; SPQ.q.forEach(x=>x.done()); SPQ.q=[]; try{ speechSynthesis.cancel(); }catch(e){} SPQ.busy=false; } _sh(id); }; }
+// ERT arrival becomes a short conversation
+{ const _a=arriveTeam; arriveTeam=function(){ const was=C&&C.arrived; _a(); if(was||!C) return; const neo=C.target.team==='NICU';
+    setTimeout(()=>{ if(!C||!C.arrived) return; sayAs('md',neo?`สวัสดีครับ ทีมแพทย์เอ็นไอซียูครับ น้องเป็นอย่างไรบ้างครับ`:`สวัสดีครับ ทีม อี อาร์ ที ครับ เล่าอาการผู้ป่วยให้ฟังหน่อยครับ`); },1900);
+    setTimeout(()=>{ if(C&&C.arrived) sayAs('rn','ขอติด monitor และเตรียมอุปกรณ์เลยนะคะ'); },4200); }; }
+
+/* ---------- 2) living patient: breathing, colour, sweat, eyes, restlessness, sounds ---------- */
+const PTL={t:0,blink:0,cough:0,said:false,col:null,sw:0};
+const PT_LINES={A1:'หายใจ ไม่ ค่อย ออก เลย',A4:'เจ็บ แน่น หน้าอก มาก',AC1:'เจ็บ หน้าอก แน่น ไป หมด',AC3:'ใจ สั่น มาก หน้า มืด',AR2:'หายใจ ไม่ ออก',AR4:'เหนื่อย มาก ใจ สั่น',
+  AN3:'ปวด หัว มาก',O1:'ปวด หัว ตา พร่า',AH3:'คัน ไป หมด จะ เป็น ลม',AH1:'หน้า มืด จะ เป็น ลม',A7:'ใจ สั่น หน้า มืด',AH5:'หนาว มาก',O4:'เหนื่อย หายใจ ไม่ ทัน',A2:'ปวด แผล',
+  AH4:'ปวด หลัง ปวด ท้อง',O5:'หน้า มืด',O2:'หนาว สั่น',AC2:'นอน ไม่ ได้ หายใจ ไม่ ออก'};
+function ptState(){ const v=GS.vit||{}, cs=C&&C.cs; if(!cs) return null; const L=cs.look||{};
+  const avpu=v.avpu||(v.neuro===3||v.neuro==='S'?'U':v.behavior===3?'P':'A');
+  return {v,cs,L,avpu,cyan:Math.max(0,Math.min(1,((cs.tool==='NEWS'?95:94)-(v.spo2??97))/10))+(L.cyan||0)*.2,
+    pale:Math.max(0,Math.min(1,(95-(v.sbp??120))/25))+(L.pale||0)*.3, flush:Math.max(0,Math.min(1,((v.temp??37)-38)/1.4)),
+    sweat:Math.max(L.sweat||0,(v.sbp??120)<90?.7:0,/AN2|AC1|A4|AH1|AH4/.test(cs.id)?.8:0), shiver:(v.temp??37)>=38.5&&/AH5|O2|A6|P4/.test(cs.id),
+    restless:avpu==='C'||L.agitated||(v.behavior===2), dysp:Math.max(L.dyspnea||0,(v.rr??16)>28?1:(v.rr??16)>22?.5:0)}; }
+onFrame((dt)=>{ if(!W3.pt||W3.mode!=='ward'||!C||$('#scr-game').hidden) return; const s=ptState(); if(!s) return; PTL.t+=dt; const T=PTL.t;
+  const P=W3.pt.userData.parts, U=W3.pt.userData;
+  // skin colour follows oxygenation, perfusion and fever
+  if(!PTL.col) PTL.col=U.base.skin.clone(); const want=U.base.skin.clone();
+  if(s.pale>0) want.lerp(new THREE.Color('#E4DED6'),.4*Math.min(1,s.pale)); if(s.cyan>0) want.lerp(new THREE.Color('#8F9DC2'),.5*Math.min(1,s.cyan)); if(s.flush>0) want.lerp(new THREE.Color('#E39A86'),.3*s.flush);
+  PTL.col.lerp(want,Math.min(1,dt*1.5)); U.skin.color.copy(PTL.col);
+  // sweat: glossy skin
+  PTL.sw+=(s.sweat-PTL.sw)*Math.min(1,dt); U.skin.roughness=.55-.35*PTL.sw; if('clearcoat' in U.skin){ U.skin.clearcoat=.8*PTL.sw; U.skin.clearcoatRoughness=.25; }
+  // eyes: open/blink when alert, half when voice, closed when pain/unresponsive or seizing
+  const lid=s.avpu==='A'||s.avpu==='C'?1:s.avpu==='V'?.35:.12; PTL.blink-=dt; let k=lid; if(PTL.blink<0){ PTL.blink=2.5+Math.random()*3; } if(PTL.blink<.12&&lid>.5) k=.1;
+  if(!(W3.ptLook.seize&&!GS.seizeStopped)) P.eyes&&P.eyes.forEach(e=>e.scale.y+=(k-e.scale.y)*Math.min(1,dt*18));
+  // accessory-muscle breathing: shoulders and head lift with each breath when dyspnoeic
+  const rr=s.v.rr||16, br=Math.max(0,Math.sin(T*Math.PI*2*rr/60));
+  if(s.dysp>0&&!(W3.ptLook.seize&&!GS.seizeStopped)){ P.head.rotation.x=-.06*s.dysp*br; if(P.torso) P.torso.scale.y=1+.012*s.dysp*br; }
+  // restlessness / confusion: head turns and arm fidgets
+  if(s.restless&&!(W3.ptLook.seize&&!GS.seizeStopped)){ P.head.rotation.y=Math.sin(T*1.7)*.28+Math.sin(T*4.1)*.05; P.armL.rotation.z=-.1+Math.sin(T*1.3)*.12; }
+  // rigors
+  if(s.shiver){ const j=Math.sin(T*38)*.012; P.torso&&(P.torso.rotation.z=j); P.armL.rotation.y=j*4; P.armR.rotation.y=-j*4; }
+  // BVM rhythm: squeeze every 6 s, chest rises with it
+  if(W3.bvm&&W3.bvmOn){ const ph=(performance.now()/1000)%6; const sq=ph<1?Math.sin(ph*Math.PI):0; const bag=W3.bvm.userData.bag; if(bag) bag.scale.set(1-.35*sq,1,1-.35*sq); if(P.torso) P.torso.scale.z=.64*(1+.06*sq); }
+  // occasional cough / complaint (only for patients who can talk)
+  PTL.cough-=dt; if(PTL.cough<0){ PTL.cough=9+Math.random()*10; if(/resp/.test(s.cs.sys||'')&&s.avpu!=='U'&&s.avpu!=='P'&&!W3.bvmOn){ coughFx(); } }
+});
+function coughFx(){ if(!W3.pt) return; const h=W3.pt.userData.parts.head; let n=0; const iv=setInterval(()=>{ h.rotation.x=(n%2?.16:-.04); if(++n>5){ clearInterval(iv); h.rotation.x=0; } },130);
+  if(!GS.sound) return; const a=ac(); if(!a) return; for(let i=0;i<2;i++){ const t=a.currentTime+i*.32; const len=.22, buf=a.createBuffer(1,a.sampleRate*len,a.sampleRate), d=buf.getChannelData(0);
+    for(let j=0;j<d.length;j++){ const e=Math.exp(-j/(a.sampleRate*.06)); d[j]=(Math.random()*2-1)*e; }
+    const s=a.createBufferSource(); s.buffer=buf; const f=a.createBiquadFilter(); f.type='bandpass'; f.frequency.value=(C&&C.cs.p.sex==='F')?900:620; f.Q.value=.9; const g=a.createGain(); g.gain.value=.18; s.connect(f).connect(g).connect(a.destination); s.start(t); } }
+// patient complains when the nurse first reaches the bedside
+{ const _n=nurseTo; nurseTo=function(spot,cb){ _n(spot,()=>{ cb&&cb(); try{ if(C&&!PTL.said&&['bed','head','foot2','ivside'].includes(spot)){ const s=ptState(); if(s&&(s.avpu==='A'||s.avpu==='C')&&s.cs.p.ageYears>=12){ const l=PT_LINES[s.cs.id]; if(l){ PTL.said=true; sayAs('pt',l); } } } }catch(e){} }); }; }
+{ const _sp=setupPatient; setupPatient=function(cs){ _sp(cs); Object.assign(PTL,{said:false,col:null,sw:0,cough:6}); W3.bvmOn=false; (W3.helpers||[]).forEach(h=>h.parent&&h.parent.remove(h)); W3.helpers=[]; }; }
+
+/* ---------- 3) call for help: a second nurse comes and assists ---------- */
+ACTIONS.help={t:'ขอความช่วยเหลือ: เรียกพยาบาลอีกคนมาช่วยที่เตียง',min:.5,cat:'Prep'};
+TRAY_LABEL.help='📣 ขอพยาบาลมาช่วยที่เตียง (ช่วยบีบ Ambu bag / จัดท่า / ห้ามเลือด)';
+NA_SCOPE.add('help');
+function spawnHelper(){ if(!G3.ok||(W3.helpers&&W3.helpers.length)) return W3.helpers&&W3.helpers[0];
+  const g=playerGender()==='M'?'F':'M'; const o={gender:g,scrub:'#6E1F2D',skin:SKIN[g==='F'?0:2],hairColor:HAIRC[0],hairStyle:g==='F'?'bun':'short',acc:new Set(['badge','watch']),height:g==='F'?160:172,name:'RN'};
+  const t=glbFor(o); const h=t?instGLB(t,o):buildPerson(o); h.position.set(3.0,0,1.6); W3.ward.add(h); W3.helpers=[h];
+  walkTo(h,-.9,-1.35,()=>{ faceTo(h,0,-1.45); if(C&&C.done.has('bvm')) helperBag(); });
+  setTimeout(()=>sayAs('help',g==='F'?'มาแล้วค่ะ ให้ช่วยอะไรคะ':'มาแล้วครับ ให้ช่วยอะไรครับ'),1800);
+  return h; }
+function helperBag(){ const h=W3.helpers&&W3.helpers[0]; if(!h) return; walkTo(h,-.84,-2.25,()=>{ faceTo(h,0,-2.42); setPose(h,'bvm'); W3.bvmOn=true;
+    fxCaption('ผู้ช่วยบีบ Ambu bag ต่อเนื่อง','บีบ 1 ครั้งทุก 6 วินาที ดูหน้าอกขยับ คุณมีมือว่างทำการพยาบาลอื่นต่อ'); }); }
+FXDEF.help={spot:'foot2',pose:'talk',dur:1600,say:()=>`ขอคนช่วยที่เตียงนี้ด่วน${polite()}`,fx:()=>spawnHelper(),res:()=>({t:'พยาบาลอีกคนกำลังมาช่วยที่เตียง'})};
+// helper joins in: positions and bleeding control are done with two people; BVM is taken over and continued
+{ const _p=playFX; playFX=async function(k){ const h=W3.helpers&&W3.helpers[0];
+    if(h&&['position','upright','lie','hob30','airway','lut','bleed','airwayopen'].includes(k)){ setPose(h,'reach'); setTimeout(()=>setPose(h,null),2600); }
+    const r=await _p(k);
+    if(k==='bvm'){ if(h) helperBag(); else { W3.bvmOn=true; setTimeout(()=>{ if(!(W3.helpers&&W3.helpers.length)) W3.bvmOn=false; },6500); } }
+    return r; }; }
+// put "call for help" at the top of the first tab
+{ const _ti=trayItems; trayItems=function(cs){ const T=_ti(cs); T.pin=['help']; return T; }; }   // always reachable above the tabs
+{ const _g=gradeCare; gradeCare=function(){ _g(); if(C.careOrder.length) itm('care:help',C.done.has('help'),'o'); }; }
+{ const _e=errLabel; errLabel=function(c){ return c==='CARE:help'?'ควรขอความช่วยเหลือ (เรียกพยาบาลอีกคน) ตั้งแต่ต้น':_e(c); }; }
+// keep the helper out of the way when the team arrives
+{ const S0=ERT_SLOTS.map(x=>x.slice()); const _s=spawnERT; spawnERT=function(){ const h=W3.helpers&&W3.helpers[0];
+    S0.forEach((x,i)=>ERT_SLOTS[i]=x.slice()); if(h&&W3.bvmOn){ ERT_SLOTS[0]=[-.95,-1.45,0,-1.7]; ERT_SLOTS[2]=[-.95,-.62,0,-1.2]; }
+    _s(); if(h&&!W3.bvmOn) setTimeout(()=>walkTo(h,-.95,-.3,()=>faceTo(h,0,-1.4)),600); }; }
+/* ================================================================
+   MORE NURSING ACTIONS — assessment, airway adjuncts, labs/blood, safety, specific drugs prepared by order.
+   New tab "ประเมิน" (assess) — each assessment returns findings from THIS patient.
+   Case-specific good actions count as recommended (bonus); a few are unsafe in specific cases.
+   ================================================================ */
+Object.assign(ACTIONS,{
+ abcde:{t:'ประเมิน ABCDE อย่างรวดเร็ว',min:.5,cat:'Assess'},
+ lung:{t:'ฟังเสียงปอด ดูการใช้กล้ามเนื้อช่วยหายใจ',min:.5,cat:'Assess'},
+ gcs:{t:'ประเมิน GCS และรูม่านตา (pupils)',min:.5,cat:'Assess'},
+ crt:{t:'ประเมิน CRT ชีพจรส่วนปลาย อุณหภูมิปลายมือเท้า',min:.5,cat:'Assess'},
+ befast:{t:'ประเมิน BE-FAST และบันทึก last seen normal',min:.5,cat:'Assess'},
+ pain:{t:'ประเมินความปวด (pain score) ตำแหน่ง ลักษณะ',min:.5,cat:'Assess'},
+ io:{t:'ประเมินปัสสาวะต่อชั่วโมง / intake–output',min:.5,cat:'Assess'},
+ fhs:{t:'ฟังเสียงหัวใจทารกในครรภ์ (Doppler FHS)',min:.5,cat:'OB'},
+ uterus:{t:'ประเมินการหดรัดตัวของมดลูก / เลือดออกทางช่องคลอด',min:.5,cat:'OB'},
+ revs:{t:'วัดสัญญาณชีพซ้ำหลังให้การพยาบาล (reassess)',min:.5,cat:'Assess'},
+ opa:{t:'ใส่ Oropharyngeal airway (OPA) วัดขนาดจากมุมปากถึงติ่งหู',min:.5,cat:'A/B',rn:true},
+ intuprep:{t:'เตรียมชุดใส่ท่อช่วยหายใจ (laryngoscope · ETT · stylet · syringe 10 ml) ให้พร้อม',min:1,cat:'A/B'},
+ sniff:{t:'จัดท่า sniffing หนุนผ้าใต้ไหล่ทารก',min:.5,cat:'Neo'},
+ lab:{t:'เจาะเลือด / hemoculture 2 ขวด ตามแผนการรักษา',min:1,cat:'C',rn:true},
+ gm:{t:'ส่ง Group & match เตรียมเลือดตามแผนการรักษา',min:.5,cat:'C',rn:true},
+ foley:{t:'ใส่สายสวนปัสสาวะ วัดปัสสาวะทุกชั่วโมง ตามแผนการรักษา',min:1,cat:'C',rn:true},
+ warmb:{t:'ห่มผ้าอุ่น ป้องกันตัวเย็น',min:.5,cat:'C'},
+ rails:{t:'ยกไม้กั้นเตียงทั้งสองข้าง หุ้มกันกระแทก ป้องกันตกเตียง',min:.5,cat:'N'},
+ seizt:{t:'จับเวลาการชักและสังเกตลักษณะการชัก',min:.5,cat:'N'},
+ g50:{t:'เตรียม 50% glucose IV ตามแผนการรักษา',min:.5,cat:'N',rn:true},
+ oralglu:{t:'ให้น้ำหวาน/กลูโคสทางปาก 15 g',min:.5,cat:'N'},
+ naloxone:{t:'เตรียม Naloxone ตามแผนการรักษา',min:.5,cat:'N',rn:true},
+ mgso4:{t:'เตรียม MgSO₄ และ calcium gluconate ตามแผนการรักษา',min:.5,cat:'OB',rn:true},
+ reassure:{t:'อธิบายและให้กำลังใจผู้ป่วย ลดความวิตกกังวล',min:.5,cat:'Comm'},
+ timelog:{t:'บันทึกเวลาเหตุการณ์และการพยาบาล (time log)',min:.5,cat:'Prep'},
+ antipyr:{t:'ให้ยาลดไข้ตามแผนการรักษา และเช็ดตัวลดไข้',min:.5,cat:'C',rn:true},
+});
+['abcde','lung','gcs','crt','befast','pain','io','fhs','uterus','revs','intuprep','sniff','warmb','rails','seizt','oralglu','reassure','timelog'].forEach(k=>NA_SCOPE.add(k));
+// recommended (bonus) and unsafe extras per case
+const XREC={AR1:['intuprep','lung','revs'],AR2:['lung','revs'],AR3:['opa','naloxone','gcs','intuprep','revs'],AR4:['lung','crt','revs'],AR5:['lung','revs'],A1:['lung','lab','revs'],A3:['lung','rails','gcs'],
+ AN1:['seizt','rails','gcs'],P4:['seizt','rails'],AN2:['g50','gcs','revs'],AN3:['gcs','intuprep'],AN4:['gcs','rails'],A5:['befast','gcs'],AN5:['befast'],
+ AC1:['pain','crt','revs'],A4:['pain','reassure'],AC2:['lung','io'],AC3:['crt','reassure'],A7:['crt','rails'],
+ AH1:['gm','warmb','crt'],AH2:['io','crt','rails'],AH3:['lung','crt','intuprep'],AH4:['gm','crt','pain'],AH5:['lab','crt'],A6:['lab','io','crt','revs'],P5:['gm','crt'],P6:['lab','crt'],
+ O1:['mgso4','fhs','io','gcs'],O2:['fhs','lab','uterus'],O4:['fhs','lung'],O5:['fhs','crt'],N1:['crt'],N2:['sniff'],P1:['lung'],P3:['lung'],A2:['pain']};
+const XBAD={AN2:['oralglu'],AR1:['opa'],AN1:['opa','oralglu'],P4:['oralglu'],A5:['oralglu'],AN5:['oralglu'],AR3:['oralglu'],AR5:['oralglu']};
+const XBADWHY={opa:'ผู้ป่วยยังมี gag reflex/กำลังชัก ใส่ OPA กระตุ้นอาเจียนและสำลัก',oralglu:'ผู้ป่วยซึม/ชัก/กลืนไม่ปลอดภัย เสี่ยงสำลัก ให้ glucose ทาง IV ตามแผนการรักษา'};
+CASES.forEach(c=>{ if(!c.care) return; (XREC[c.id]||[]).forEach(k=>{ if(!c.care.rec.includes(k)&&!c.care.req.includes(k)) c.care.rec.push(k); });
+  (XBAD[c.id]||[]).forEach(k=>{ if(!c.care.bad.includes(k)) c.care.bad.push(k); c.badWhy=c.badWhy||{}; c.badWhy[k]=c.badWhy[k]||XBADWHY[k]; }); });
+// rec bonus: up to 6 points instead of 4 now that there are more good options
+{ const _g=gradeCare; gradeCare=function(){ _g(); const extra=C.cs.care.rec.filter(k=>C.done.has(k)).length; if(extra>2){ C.dom.care=Math.min(20,C.dom.care+Math.min(2,(extra-2)*1)); updScore(); }
+    const touched=C.careOrder.filter(o=>!['revs','help','timelog'].includes(o.k)).length; if(touched>=2) itm('care:reassess',C.done.has('revs'),'o'); }; }
+{ const _e=errLabel; errLabel=function(c){ return c==='CARE:reassess'?'ควรประเมินสัญญาณชีพซ้ำหลังให้การพยาบาล':_e(c); }; }
+Object.assign(TRAY_LABEL,{revs:'🔁 วัดสัญญาณชีพซ้ำหลังให้การพยาบาล (reassess)'});
+TRAY_TABS.unshift(['assess','ประเมิน']);
+{ const _ti=trayItems; trayItems=function(cs){ const T=_ti(cs), pop=critPop(cs.p), neo=pop==='neo', ob=pop==='ob', bad=cs.care.bad;
+    T.assess=['abcde','revs','lung',...(neo?[]:['gcs']),'crt',...(neo?[]:['befast','pain','io']),...(ob?['fhs','uterus']:[])];
+    if(!neo){ T.air.splice(T.air.indexOf('bvm'),0,'opa'); T.air.push('intuprep'); T.circ.push('lab','gm','foley','warmb','antipyr'); T.neuro.push('rails','seizt','g50','naloxone',...(bad.includes('oralglu')||cs.sys==='neuro'?['oralglu']:[]));
+      if(ob) (T.spec=T.spec||[]).push('mgso4'); T.prep.push('reassure','timelog'); }
+    else { T.pos=['sniff',...T.pos.filter(k=>k!=='airwayopen')]; T.circ.push('warmb'); T.prep.push('timelog'); }
+    return T; }; }
+// assessments show this patient's findings
+const PBOF=id=>(RSN[id]||{}).pb;
+function lungFind(cs){ const v=GS.vit, pb=PBOF(cs.id);
+  return pb==='bronchospasm'||pb==='ob_hypox'||cs.id==='AH3'?'เสียงวี้ด (wheeze) ทั้งสองข้าง หายใจออกยาว':pb==='airway_secr'||pb==='aspiration'?'เสียงครืดคราด (coarse crepitation) ในลำคอและปอด':pb==='pulm_edema'?'crackles ทั้งสองข้างถึงกลางปอด':
+   pb==='hypox_infect'||pb==='peds_resp'?'crackles ปอดขวาล่าง หายใจเร็ว ใช้กล้ามเนื้อช่วยหายใจ':pb==='neo_rd'?'เสียงคราง (grunting) ปีกจมูกบาน หน้าอกบุ๋ม':pb==='resp_depress'?'หายใจช้าตื้น กรน เสียงลมเข้าลดลง':pb==='pe'?'เสียงปอดปกติ แต่หายใจเร็ว':(v.rr>24?'หายใจเร็ว เสียงปอดปกติ':'เสียงปอดปกติ ไม่ใช้กล้ามเนื้อช่วยหายใจ'); }
+function gcsFind(cs){ const v=GS.vit, a=v.avpu||'A', st=cs.story||''; const g={A:'GCS 15 (E4V5M6)',C:'GCS 14 (E4V4M6) สับสน',V:'GCS 11 (E3V3M5)',P:'GCS 8 (E2V2M4)',U:'GCS 5 (E1V1M3)'}[a]||'GCS 15';
+  const pu=/รูม่านตาขวาใหญ่/.test(st)?'pupil ขวา 5 mm ไม่ตอบสนองแสง · ซ้าย 3 mm':/รูม่านตาเล็ก/.test(st)?'pupils 1 mm เท่ากันทั้งสองข้าง (pinpoint)':'pupils 3 mm เท่ากัน ตอบสนองต่อแสง'; return g+' · '+pu; }
+function crtFind(cs){ const v=GS.vit; return (v.sbp<90||v.crt>=1||cs.sys==='shock')?'CRT 3–4 วินาที ปลายมือเท้าเย็น ชีพจรเบาเร็ว':'CRT < 2 วินาที ปลายมือเท้าอุ่น ชีพจรชัดเจน'; }
+Object.assign(FXDEF,{
+ abcde:{spot:'head',pose:'reach',res:cs=>({t:`A: ${/ครืดคราด|กรน/.test(cs.story)?'ทางเดินหายใจไม่โล่ง':'ทางเดินหายใจโล่ง'} · B: RR ${GS.vit.rr} SpO₂ ${GS.vit.spo2}% · C: HR ${GS.vit.hr}${GS.vit.sbp?' BP '+GS.vit.sbp+'/'+GS.vit.dbp:''} · D: ${GS.vit.avpu||'-'}`})},
+ lung:{spot:'bed',pose:'reach',res:cs=>({t:lungFind(cs)})},
+ gcs:{spot:'head',pose:'reach',res:cs=>({t:gcsFind(cs)})},
+ crt:{spot:'bed',pose:'reachR',res:cs=>({t:crtFind(cs)})},
+ befast:{spot:'head',pose:'talk',res:cs=>({t:/อ่อนแรง|ปากเบี้ยว|พูดไม่ชัด/.test(cs.story)?'BE-FAST ผิดปกติ: ปากเบี้ยว แขนอ่อนแรง พูดไม่ชัด · บันทึกเวลา last seen normal แล้ว':'BE-FAST ปกติ'})},
+ pain:{spot:'head',pose:'talk',res:cs=>({t:/เจ็บ|ปวด/.test(cs.story)?'ปวด 7–8/10 ตามตำแหน่งที่ผู้ป่วยบอก':'ไม่มีอาการปวดเด่นชัด'})},
+ io:{spot:'foot2',pose:'reachR',res:cs=>({t:/ปัสสาวะออกน้อย|ปัสสาวะ 25|ปากแห้ง/.test(cs.story)||cs.v.urine<30?'ปัสสาวะ < 0.5 ml/kg/hr ออกน้อยลง':'ปัสสาวะออกปกติ'})},
+ fhs:{spot:'bed',pose:'reach',res:cs=>({t:cs.v.hr>120||cs.v.temp>38?'FHS 170 /min (tachycardia)':cs.v.spo2<94?'FHS 105 /min (bradycardia)':'FHS 140 /min สม่ำเสมอ'})},
+ uterus:{spot:'bed',pose:'press',res:cs=>({t:/active labour/.test(cs.p.dx)?'มดลูกหดรัดตัวทุก 3 นาที นาน 45 วินาที ไม่มีเลือดออก':'มดลูกนุ่ม ไม่มีเลือดออกทางช่องคลอด'})},
+ revs:{spot:'monitor',pose:'reach',fx:()=>['hr','spo2','rr','bp','temp'].forEach(x=>GS.measured.add(x)),res:()=>{ const v=GS.vit; return {t:`ค่าล่าสุด: HR ${v.hr} · RR ${v.rr} · SpO₂ ${v.spo2}%${v.sbp?' · BP '+v.sbp+'/'+v.dbp:''} · T ${v.temp}`}; }},
+ opa:{spot:'head',pose:'reach',res:cs=>({v:{spo2:v=>v.spo2+(/AR3/.test(cs.id)?3:0)},t:'ใส่ OPA แล้ว ลมเข้าออกดีขึ้น'})},
+ intuprep:{spot:'foot2',pose:'reachR',fx:()=>{ try{ propCart(); }catch(e){} },res:()=>({t:'ชุดใส่ท่อช่วยหายใจพร้อมใช้ข้างเตียง'})},
+ sniff:{spot:'head',pose:'reach',res:()=>({v:{spo2:v=>Math.min(97,v.spo2+1)},t:'ทางเดินหายใจทารกตรง'})},
+ lab:{spot:'ivside',pose:'reach',fx:()=>PROP.syringe(),res:()=>({t:'ส่งเลือดและ hemoculture แล้ว'})},
+ gm:{spot:'phone',pose:'phone',cam:'phone',fx:()=>PROP.handset(),res:()=>({t:'แจ้งธนาคารเลือดเตรียมเลือดแล้ว'})},
+ foley:{spot:'foot2',pose:'reachR',res:()=>({t:'ติดตามปัสสาวะทุกชั่วโมง'})},
+ warmb:{spot:'bed',pose:'reach',res:()=>({t:'ห่มผ้าอุ่นแล้ว'})},
+ rails:{spot:'bed',pose:'reach',res:()=>({t:'ยกไม้กั้นเตียงทั้งสองข้างแล้ว'})},
+ seizt:{spot:'bed',pose:'talk',res:()=>({t:'เริ่มจับเวลา: ชักเกร็งกระตุกทั้งตัว'})},
+ g50:{spot:'ivside',pose:'reach',fx:()=>PROP.syringe(),res:()=>({t:'เตรียม 50% glucose พร้อมให้ตามแผนการรักษา'})},
+ oralglu:{spot:'head',pose:'reachR',fx:()=>PROP.cup(),cough:true,res:()=>({t:'ผู้ป่วยดื่มน้ำหวานได้'})},
+ naloxone:{spot:'ivside',pose:'reach',fx:()=>PROP.syringe(),res:()=>({t:'เตรียม Naloxone พร้อมให้ตามแผนการรักษา'})},
+ mgso4:{spot:'ivside',pose:'reach',fx:()=>PROP.syringe(),res:()=>({t:'เตรียม MgSO₄ และ calcium gluconate (antidote) ข้างเตียง'})},
+ reassure:{spot:'head',pose:'talk',say:()=>`ตอนนี้ทีมกำลังมาดูแลนะ${polite()} หายใจช้า ๆ ${polite()}`,res:()=>({v:{hr:v=>v.hr>100?v.hr-3:v.hr},t:'ผู้ป่วยคลายความกังวลลง'})},
+ timelog:{spot:'foot2',pose:'reachR',fx:()=>PROP.chart(),res:()=>({t:'บันทึกเวลาและการพยาบาลแล้ว'})},
+ antipyr:{spot:'ivside',pose:'reach',res:cs=>({v:{temp:v=>v.temp>38?+(v.temp-.3).toFixed(1):v.temp},t:'ให้ยาลดไข้และเช็ดตัวแล้ว'})},
+});
+/* ================================================================
+   REAL WARD CYCLE — ช่วยก่อน → แจ้ง → ประเมินซ้ำและช่วยต่อ (all levels)
+   1 พบผู้ป่วย (quick look)  2 ช่วยเหลือทันที (tray open from the start)  3 วัด V/S + EWS (first-contact values)
+   4 วิเคราะห์ · Protocol · ตัดสินใจ  5 แจ้งทีม  6 ดูแลต่อ + ประเมินซ้ำ (patient improves or deteriorates)
+   7 ทีมมาถึง ส่งต่อ SBAR  8 สรุปผล
+   The patient's live vitals follow what the nurse does; time spent thinking also passes for the patient.
+   ================================================================ */
+ACTIONS.recall={t:'โทรแจ้งทีม ERT / แพทย์ซ้ำ: อาการผู้ป่วยแย่ลง (update)',min:.5,cat:'Comm'};
+TRAY_LABEL.recall='📞 แจ้งทีม ERT / แพทย์ซ้ำเมื่ออาการแย่ลง';
+NA_SCOPE.add('recall');
+const vitLine=()=>{ const v=GS.vit||{}; return [v.spo2!=null&&`SpO₂ ${v.spo2}%`,v.rr!=null&&`หายใจ ${v.rr}`,v.hr!=null&&`ชีพจร ${v.hr}`,v.sbp!=null&&`ความดัน ${v.sbp}/${v.dbp}`].filter(Boolean).join(' '); };
+FXDEF.recall={spot:'phone',pose:'phone',cam:'phone',fx:()=>PROP.handset(),say:()=>`ขอแจ้งซ้ำ${polite()} ผู้ป่วย${C.cs.p.name} อาการแย่ลง ${vitLine()}${polite()}`,
+  res:()=>{ if(C.worse&&C.arrive) C.arrive=Math.max(C.careClock+1,C.arrive-1.5); return {t:C.worse?'ทีมรับทราบ กำลังเร่งมาที่เตียง':'แจ้งข้อมูลล่าสุดให้ทีมแล้ว'}; }};
+{ const _ti=trayItems; trayItems=function(cs){ const T=_ti(cs); (T.pin=T.pin||[]).push('recall'); if(!T.prep.includes('recall')) T.prep.splice(T.prep.indexOf('md')+1||0,0,'recall'); return T; }; }
+
+// order: รับเวร → EWS → วัด & ให้คะแนน (as found) → ช่วยเหลือทันที → วิเคราะห์ → … → ดูแลต่อ/ประเมินซ้ำ
+[PHASES_CALL,PHASES_NO].forEach(P=>{ const i=P.findIndex(p=>p[0]==='measure'); P.splice(i+1,0,['first','ช่วยเหลือทันที']); });
+{ const _r=render; render=function(){ if(C&&C.phase==='first'){ rail(); $('#ertFlash').hidden=true; rFirst(); $('#cpBody').scrollTop=0; return; } _r(); }; }
+// after the EWS score is confirmed, go to immediate help (not straight to reasoning)
+{ const _sg=showGrade; showGrade=function(pre){ _sg(pre); if(pre) return; setFoot([{id:'bN',t:'ช่วยเหลือผู้ป่วยทันที →',cls:'primary',on:()=>{ C.graded=false; C.mySum=C.truth.items.reduce((a,it)=>a+(C.sel[it.k]??0),0); C.firstOrder=C.firstOrder||[]; C.firstClock=C.firstClock||0; nurseTo('bed'); go('first'); }}]); }; }
+
+function quickLook(cs){ const L=cs.look||{}, v=(C.pre&&!C.pre.done?cs.pre.v:cs.v), a=v.avpu, out=[];
+  out.push({A:'ลืมตา พูดคุยได้',C:'ลืมตา แต่พูดสับสน',V:'หลับ ต้องเรียกจึงลืมตา',P:'ไม่ลืมตา ต้องกระตุ้นด้วยความเจ็บปวด',U:'ไม่ตอบสนอง'}[a]||(v.neuro===1?'ซึม ไม่ค่อยขยับ':v.behavior>=2?'ร้องกวน กระสับกระส่าย':'ตื่นดี'));
+  if(L.seize) out.push('เกร็งกระตุกทั้งตัว'); if(L.dyspnea||v.rr>26) out.push('หายใจหอบเร็ว'); if(v.pattern==='grunting') out.push('หายใจมีเสียงคราง');
+  if(L.cyan||v.spo2<90) out.push('ริมฝีปาก/ปลายมือคล้ำ'); if(L.pale||v.sbp<90) out.push('ผิวซีด'); if(L.sweat) out.push('เหงื่อออก');
+  if(L.bleed) out.push('มีเลือดออกให้เห็น'); if(L.chest) out.push('มือกุมหน้าอก'); if(/ครืดคราด|กรน/.test(cs.story)) out.push('ได้ยินเสียงครืดคราด/กรน');
+  if(out.length===1) out.push('ไม่เห็นภาวะคุกคามชีวิตชัดเจน'); return out.map(t=>`<span class="ql">${esc(t)}</span>`).join(''); }
+function rFirst(){
+  const cs=C.cs; C.firstOrder=C.firstOrder||[]; C.firstClock=C.firstClock||0;
+  $('#cpHead').innerHTML=head('ช่วยเหลือผู้ป่วยทันที (หลังประเมิน EWS)');
+  $('#cpBody').innerHTML=`<div class="clock" style="border-color:var(--gold);background:rgba(245,190,70,.08)"><div><div class="eyebrow" style="color:var(--gold)">เวลาตั้งแต่เริ่มช่วยเหลือ</div><b>${fmtT(C.firstClock*60)}</b></div><span class="muted" style="font-size:12.5px">อาการผู้ป่วยเปลี่ยนตามเวลาและสิ่งที่คุณทำ</span></div>
+   <div class="pt-card"><div class="eyebrow">ภาพแรกที่เห็น (quick look)</div><div class="ql-wrap">${quickLook(cs)}</div></div>
+   <p style="margin:0;font-size:13.5px">คุณประเมิน ${esc(cs.tool)} ได้ <b>${C.mySum??'-'}</b> คะแนน ถ้ามีภาวะคุกคามชีวิต <b>ช่วยเหลือทันที</b> จากแผงด้านขวา เช่น ขอความช่วยเหลือ เปิดทางเดินหายใจ ให้ O₂ จัดท่า ห้ามเลือด แล้ววิเคราะห์ปัญหาและตัดสินใจตามทีม · ถ้ายังไม่มีภาวะเร่งด่วน ไปขั้นถัดไปได้เลย</p>
+   <div class="timeline">${C.firstOrder.length?C.firstOrder.map(o=>`<div>${fmtT(o.t*60)}  ${esc(trayLabel(o.k))}</div>`).join(''):'<div>ยังไม่มีการช่วยเหลือ</div>'}</div>
+   ${hint('ลำดับความสำคัญ A ทางเดินหายใจ → B การหายใจ/O₂ → C การไหลเวียน/เลือดออก → D ความรู้สึกตัว/น้ำตาล · ขอความช่วยเหลือตั้งแต่แรก · ให้ O₂ แล้วเปลี่ยน/ปรับอุปกรณ์ได้ตามค่า SpO₂ ที่ประเมินซ้ำ')}`;
+  renderTray();
+  setFoot([{id:'bM',t:'วิเคราะห์ปัญหาผู้ป่วย →',cls:'primary',dis:!!C.busy,on:()=>{ C.firstEndT=performance.now(); go('reason'); }}]);
+}
+// actions during the first-response phase
+{ const _d=doCare; doCare=function(k){
+    if(k==='revs'||CHANGEABLE.has(k)) C.done.delete(k);            // re-check vitals as often as needed; O₂ can be stepped up
+    if(C.phase==='first'){ const a=ACTIONS[k]; if(!a||C.done.has(k)||C.busy) return; C.done.add(k); C.firstOrder.push({k,t:C.firstClock}); C.firstClock+=a.min; evolve(a.min);
+      if(k==='monitor'||k==='ekg') ['hr','spo2','rr','bp'].forEach(x=>GS.measured.add(x));
+      const cid=GS.caseId, next=()=>{ if(GS.caseId!==cid||C.phase!=='first') return; C.busy=false; rFirst(); };
+      if(G3.ok&&W3.pt){ C.busy=true; rFirst(); playFX(k).catch(e=>console.warn('fx',e)).finally(next); } else { if(isBad(k)) toast('ไม่เหมาะสม: '+(C.cs.badWhy[k]||a.why),'bad',3400); next(); }
+      return; }
+    const c0=C.careClock; _d(k); const dt=C.careClock-c0; if(C.phase==='care'&&dt>0){ C.evClock=C.careClock; evolve(dt); } }; }
+// care phase keeps first-response actions; time that passes while waiting also counts
+{ const _rc=rCare; rCare=function(){ const init=C.arrive==null; _rc(); if(init){ C.evClock=0; } }; }
+{ const _a=arriveTeam; arriveTeam=function(){ if(C&&!C.arrived&&C.careClock>(C.evClock||0)){ evolve(C.careClock-(C.evClock||0)); C.evClock=C.careClock; } _a(); }; }
+// thinking time passes for the patient too (capped), applied when the call is made
+{ const _g=gradeCall; gradeCall=function(){ if(C&&C.firstEndT){ const m=Math.min(2,(performance.now()-C.firstEndT)/45000); if(m>.2) evolve(m); } _g(); }; }
+// EWS is scored on first-contact values, while the bedside monitor keeps showing the live patient
+{ const _m=rMeasure; rMeasure=function(){ const live=(FX.vitCopy&&!C.cs.pre)?GS.vit:null; _m(); if(live) GS.vit=live; }; }
+
+/* ---------- the patient changes with time and care ---------- */
+function evolve(dt){
+  if(!C||!dt||!C.needCall) return; const cs=C.cs, crit=cs.first||[]; if(!crit.length) return;
+  const o2done=k=>k==='o2'?['o2','o2copd','neoo2'].some(x=>C.done.has(x)):C.done.has(k);
+  const missing=crit.filter(k=>!o2done(k)); const f=(S.level===1?.5:S.level>=3?1.25:1)*dt; const v=vitShow();
+  const cat=PB_CAT[(RSN[cs.id]||{}).pb]||'x'; C.sev=C.sev||0; C.av0=C.av0||v.avpu;
+  if(missing.length){ const w=missing.length/crit.length; C.sev+=f*w;
+    if(v.spo2!=null&&(cat==='resp'||v.spo2<94)) v.spo2=Math.max(72,Math.round(v.spo2-1.4*f*w));
+    if(v.rr!=null&&cat==='resp') v.rr=v.rr<12?Math.max(4,Math.round(v.rr-.5*f*w)):Math.min(44,Math.round(v.rr+.8*f*w));
+    if(v.hr!=null) v.hr=v.hr<60?Math.max(28,Math.round(v.hr-1*f*w)):Math.min(175,Math.round(v.hr+1.6*f*w));
+    if(v.sbp!=null&&(cat==='circ'||v.sbp<100)){ v.sbp=Math.max(55,Math.round(v.sbp-2.2*f*w)); v.dbp=Math.max(30,Math.round(v.dbp-1.3*f*w)); }
+    if(C.sev>4&&v.avpu){ const L=['A','C','V','P','U'], i=L.indexOf(v.avpu); if(i>=0&&i<3){ v.avpu=L[i+1]; C.sev=2; } } }
+  else { if(v.spo2!=null&&v.spo2<95) v.spo2=Math.min(96,Math.round(v.spo2+.7*f)); if(v.hr!=null&&v.hr>100) v.hr=Math.max(96,Math.round(v.hr-1.2*f)); if(v.rr!=null&&v.rr>22) v.rr=Math.max(20,Math.round(v.rr-.6*f)); }
+  GS.alarm=['hr','spo2','rr','sbp'].some(x=>GS.measured.has(x==='sbp'?'bp':x)&&GS.critCheck(x)); alarm(GS.alarm);
+  if(!C.worse&&(C.phase==='care'||C.phase==='first')&&((v.spo2!=null&&v.spo2<85)||(v.sbp!=null&&v.sbp<80)||(v.avpu&&v.avpu!==C.av0))){
+    C.worse=true; C.worseT=C.phase==='care'?C.careClock:-1; beep(880,.2,.06,'square'); beep(880,.2,.06,'square',.3);
+    toast('⚠ ผู้ป่วยอาการแย่ลง ประเมินซ้ำ ช่วยเหลือ และแจ้งทีมซ้ำ','bad',4500);
+    if(v.avpu==='A'||v.avpu==='C') try{ sayAs('pt','ไม่ไหว แล้ว'); }catch(e){} }
+}
+
+/* ---------- scoring for the cycle ---------- */
+{ const _g=gradeCare; gradeCare=function(){ const cs=C.cs, keep=C.careOrder; C.careOrder=[...(C.firstOrder||[]).map(o=>({k:o.k,t:-1})),...keep];
+    _g(); C.careOrder=keep; let adj=0;
+    if((cs.first||[]).length){ const early=(C.firstOrder||[]).some(o=>cs.first.includes(o.k)||(o.k==='o2copd'&&cs.first.includes('o2'))); itm('care:early',early,'o');
+      if(early) adj+=2; else { addErr('EARLY'); if(S.level>1) adj-=1; } }
+    if(C.worse){ const ok=C.done.has('recall'); itm('care:recall',ok,'o'); if(!ok){ addErr('RECALL'); adj-=2; } }
+    if(adj){ C.dom.care=Math.max(0,Math.min(20,C.dom.care+adj)); updScore(); } }; }
+{ const _f=finishCase; finishCase=function(){ if(C&&C.branch==='no'){ const bad=[...C.done].filter(k=>isBad(k)); if(bad.length){ bad.forEach(k=>addErr('HARM:'+k)); C.dom.care=Math.max(0,(C.dom.care||0)-5*bad.length); } } _f(); }; }
+{ const _e=errLabel; errLabel=function(c){ return c==='EARLY'?'ควรช่วยเหลือภาวะคุกคามชีวิตทันทีตั้งแต่แรกพบ (ก่อนวัดและให้คะแนน)':c==='RECALL'?'ผู้ป่วยทรุดลงระหว่างรอทีม ควรแจ้งทีม/แพทย์ซ้ำ':_e(c); }; }
+{ const _il=itemLabel; itemLabel=function(id,key){ return key==='care:early'?'ช่วยเหลือภาวะเร่งด่วนตั้งแต่แรกพบ':key==='care:recall'?'แจ้งซ้ำเมื่ออาการแย่ลง':key==='care:reassess'?'ประเมินซ้ำหลังให้การพยาบาล':_il(id,key); }; }
+{ const _sc=startCase; startCase=function(){ _sc(); if(C) Object.assign(C,{firstOrder:[],firstClock:0,worse:false,sev:0,av0:null,evClock:0}); }; }
+{ const st=document.createElement('style'); st.textContent=`.ql-wrap{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.ql{font-size:13px;padding:4px 10px;border-radius:999px;background:#0b1a2e;border:1px solid var(--line)}`; document.head.appendChild(st); }
+/* ================================================================
+   EMERGENCY CART · INTUBATION ASSIST · ASSIST TASKS AFTER ERT ARRIVES · EQUIPMENT LAB
+   ================================================================ */
+const CART={
+ top:{t:'ด้านบนรถ',items:[['defib','Defibrillator ZOLL R Series + สาย pads/ECG'],['suc','เครื่องดูดเสมหะ (suction) + ขวดรองรับ'],['o2t','ถังออกซิเจนพร้อม flowmeter'],['board','แผ่นรองหลัง (CPR board)'],['glove','ถุงมือ / แว่นป้องกัน']]},
+ d1:{t:'ลิ้นชัก 1 · ยาฉุกเฉิน',items:[['adr','Adrenaline 1 mg/1 ml'],['amio','Amiodarone 150 mg/3 ml'],['atro','Atropine 0.6 mg/1 ml'],['bicarb','7.5% Sodium bicarbonate 50 ml'],['ca','10% Calcium gluconate 10 ml'],
+   ['g50','50% Glucose 50 ml'],['adeno','Adenosine 6 mg/2 ml'],['nalox','Naloxone 0.4 mg/1 ml'],['diaz','Diazepam 10 mg/2 ml'],['mida','Midazolam 5 mg/1 ml'],['dopa','Dopamine 250 mg/10 ml'],['nor','Norepinephrine 4 mg/4 ml'],['lido','2% Lidocaine'],['mg','50% Magnesium sulfate'],['nss10','NSS 10 ml (flush)']]},
+ d2:{t:'ลิ้นชัก 2 · ทางเดินหายใจ',items:[['handle','Laryngoscope handle (ตรวจไฟ)'],['mac3','Macintosh blade เบอร์ 3'],['mac4','Macintosh blade เบอร์ 4'],['mil1','Miller blade เบอร์ 1 (ทารก)'],['mac2','Macintosh blade เบอร์ 2 (เด็ก)'],
+   ['ett65','ET tube 6.5 mm'],['ett70','ET tube 7.0 mm'],['ett75','ET tube 7.5 mm'],['ett80','ET tube 8.0 mm'],['ett40','ET tube 4.0 mm'],['stylet','Stylet'],['syr10','Syringe 10 ml (ใส่ลม cuff)'],['ky','สารหล่อลื่น (K-Y jelly)'],
+   ['magill','Magill forceps'],['opa','Oropharyngeal airway เบอร์ 3–4'],['etco2','ETCO₂ detector / capnography'],['holder','ETT holder / พลาสเตอร์ยึดท่อ'],['bvm','Ambu bag + mask + reservoir (ผู้ใหญ่)'],['yank','Yankauer + สาย suction'],['steth','หูฟัง (stethoscope)'],['trach','Tracheostomy tube']]},
+ d3:{t:'ลิ้นชัก 3 · หลอดเลือด / สารน้ำ',items:[['iv18','IV cath 18G'],['iv20','IV cath 20G'],['iv22','IV cath 22G'],['iv24','IV cath 24G'],['set','IV set + extension + three-way'],['nss','NSS 0.9% 1,000 ml'],['ring','Acetar / LRS 1,000 ml'],['torn','สายรัด (tourniquet)'],['alc','สำลีแอลกอฮอล์ / ก๊อซ'],['syr3','Syringe 3–5 ml'],['tube','หลอดเลือด CBC/Chem/H/C']]},
+ d4:{t:'ลิ้นชัก 4 · อื่น ๆ',items:[['ecg','แผ่น ECG electrode'],['pads','Defib pads ผู้ใหญ่'],['ppads','Defib pads เด็ก'],['ng','NG tube'],['foley','สายสวนปัสสาวะ (Foley)'],['chest','ชุดใส่สายระบายทรวงอก'],['sengs','Sengstaken–Blakemore tube']]},
+};
+const CART_LAB=Object.fromEntries(Object.values(CART).flatMap(d=>d.items));
+function cartModal(opt={}){ // opt.select: Set to toggle into, opt.onDone(set), opt.title
+  const sel=opt.select||null, tabs=Object.entries(CART); let cur=opt.tab||'d2';
+  const draw=()=>{ modal(`<div class="mhead"><div><div class="eyebrow">Emergency cart · รถช่วยชีวิตข้างเตียง</div><h2 style="font-size:19px">${esc(opt.title||'สำรวจ Emergency cart')}</h2></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>
+    ${opt.brief?`<div class="fb info" style="font-size:13.5px">${opt.brief}</div>`:''}
+    <div class="cart-ui"><div class="cart-drawers">${tabs.map(([k,d])=>`<button class="drawer ${k===cur?'on':''}" data-dr="${k}"><span class="handle"></span>${esc(d.t)}${sel?` <small>${d.items.filter(i=>sel.has(i[0])).length||''}</small>`:''}</button>`).join('')}</div>
+    <div class="cart-items">${CART[cur].items.map(([k,l])=>`<button class="ci ${sel&&sel.has(k)?'on':''}" data-ci="${k}" ${sel?'':'tabindex="-1"'}>${esc(l)}</button>`).join('')}</div></div>
+    ${sel?`<div class="pt-card"><div class="eyebrow">ถาดที่เตรียม (${sel.size})</div><div style="font-size:13px">${[...sel].map(k=>esc(CART_LAB[k])).join(' · ')||'—'}</div></div>
+      <div class="flex"><button class="btn primary right-al" id="cartOk">ส่งถาดอุปกรณ์ให้แพทย์ →</button></div>`:''}`);
+    $('#mbox').classList.add('wide');
+    $$('#mbox [data-dr]').forEach(b=>b.onclick=()=>{ cur=b.dataset.dr; draw(); });
+    if(sel){ $$('#mbox [data-ci]').forEach(b=>b.onclick=()=>{ const k=b.dataset.ci; sel.has(k)?sel.delete(k):sel.add(k); draw(); }); $('#cartOk').onclick=()=>{ closeModal(); opt.onDone&&opt.onDone(sel); }; } };
+  draw(); }
+
+/* ---------- intubation assist ---------- */
+const INTU_STEPS=[['check','ตรวจไฟ laryngoscope และทดสอบ cuff ETT (ใส่ลมแล้วดูดออก) ใส่ stylet'],['preox','Preoxygenate ด้วย BVM ต่อ O₂ 15 L/min (100%) 3 นาที'],['pos','จัดท่า sniffing position และเปิด suction พร้อมใช้'],
+ ['hand','ส่ง laryngoscope แล้วส่ง ETT ให้แพทย์ (ช่วย BURP/คีบตามที่แพทย์ขอ)'],['cuff','ถอด stylet ใส่ลม cuff 5–10 ml'],['confirm','ยืนยันตำแหน่งท่อ: ETCO₂/capnography + ฟังเสียงปอด 5 จุด'],
+ ['secure','ยึดท่อ บันทึกระดับที่มุมปาก (หญิง ~21 cm · ชาย ~23 cm)'],['vent','ต่อ BVM ช่วยหายใจ 1 ครั้งทุก 6 วินาที / เตรียมเครื่องช่วยหายใจ']];
+const INTU_BAD=[['cuff20','ใส่ลม cuff 20 ml ให้แน่นที่สุด'],['secureFirst','ยึดท่อทันทีก่อนยืนยันตำแหน่ง'],['stomach','ฟังเสียงที่กระเพาะอาหารอย่างเดียวก็พอ']];
+function intuNeed(cs){ const F=cs.p.sex==='F'; return {blade:F?['mac3']:['mac4','mac3'],ett:F?['ett70','ett65','ett75']:['ett75','ett80','ett70'],core:['stylet','syr10','ky','etco2','holder','bvm','yank','steth'],
+  wrong:['mil1','mac2','ett40','trach','ng','foley','chest','sengs']}; }
+function intubationTask(cs,done){
+  const need=intuNeed(cs), sel=new Set(), ex=S&&S.exam;
+  cartModal({select:sel,tab:'d2',title:'ช่วยแพทย์ใส่ท่อช่วยหายใจ: เตรียมถาดอุปกรณ์',
+    brief:`แพทย์: “เตรียมใส่ท่อช่วยหายใจครับ” · ผู้ป่วย${cs.p.sex==='F'?'หญิง':'ชาย'} อายุ ${esc(cs.p.ageTxt)} · เลือกอุปกรณ์จากลิ้นชักให้ครบและถูกขนาด แล้วส่งถาดให้แพทย์`,
+    onDone:()=>stepOrder(sel)});
+  function stepOrder(sel){ const opts=shuffle([...INTU_STEPS,...INTU_BAD]); const order=[];
+    const draw=()=>{ modal(`<div class="mhead"><div><div class="eyebrow">ช่วยแพทย์ใส่ท่อช่วยหายใจ</div><h2 style="font-size:19px">เรียงลำดับการช่วยแพทย์ (กดตามลำดับ)</h2></div></div>
+      <p class="muted" style="margin:0;font-size:13px">กดขั้นตอนที่ควรทำตามลำดับ ไม่ต้องเลือกข้อที่ไม่ควรทำ · กดซ้ำเพื่อยกเลิก</p>
+      <div style="display:grid;gap:6px">${opts.map(([k,t])=>{ const i=order.indexOf(k); return `<button class="choice" data-st="${k}" aria-pressed="${i>=0}">${i>=0?`<b class="mono" style="color:var(--gold)">${i+1}.</b> `:''}${esc(t)}</button>`; }).join('')}</div>
+      <div class="flex"><button class="btn primary right-al" id="stOk" ${order.length<4?'disabled':''}>ยืนยันลำดับ</button></div>`); $('#mbox').classList.add('wide');
+      $$('#mbox [data-st]').forEach(b=>b.onclick=()=>{ const k=b.dataset.st, i=order.indexOf(k); i>=0?order.splice(i,1):order.push(k); draw(); });
+      $('#stOk').onclick=()=>finish(sel,order); };
+    draw(); }
+  function finish(sel,order){
+    const has=k=>sel.has(k), any=a=>a.some(has), F=cs.p.sex==='F';
+    // ---- part 1: equipment ----
+    const eq=[['Laryngoscope handle',has('handle'),INTU_WHY.handle],
+      ['Blade ขนาดเหมาะสม ('+(F?'Mac 3':'Mac 3–4')+')',any(need.blade),INTU_WHY.blade+(F?' ผู้หญิงใช้ Mac 3':' ผู้ชายใช้ Mac 3–4')],
+      ['ET tube ขนาดเหมาะสม ('+(F?'7.0':'7.5–8.0')+')',any(need.ett),INTU_WHY.ett+(F?' ผู้หญิง 7.0 (6.5–7.5)':' ผู้ชาย 7.5–8.0')]];
+    need.core.forEach(k=>eq.push([CART_LAB[k],has(k),INTU_WHY[k]||'']));
+    const wrongPicked=need.wrong.filter(has);
+    eq.push(['ไม่หยิบอุปกรณ์ที่ไม่เกี่ยวข้อง'+(wrongPicked.length?` (หยิบ: ${wrongPicked.map(k=>CART_LAB[k]).join(', ')})`:''),!wrongPicked.length,'อุปกรณ์ผิดขนาดหรือไม่เกี่ยวข้องทำให้ถาดรก เสียเวลา และเสี่ยงหยิบผิดขณะวิกฤต']);
+    const eqScore=eq.filter(i=>i[1]).length/eq.length;
+    // ---- part 2: procedure steps ----
+    const good=INTU_STEPS.map(s=>s[0]); const picked=order.filter(k=>good.includes(k)); const seq=picked.map(k=>good.indexOf(k));
+    // longest correctly-ordered subsequence (with members) → those steps are "in order"
+    const L=seq.map(()=>1), P=seq.map(()=>-1); seq.forEach((x,i)=>{ for(let j=0;j<i;j++) if(seq[j]<x&&L[j]+1>L[i]){ L[i]=L[j]+1; P[i]=j; } });
+    let end=L.length?L.indexOf(Math.max(...L)):-1; const inOrd=new Set(); while(end>=0){ inOrd.add(picked[end]); end=P[end]; }
+    const badSteps=order.filter(k=>!good.includes(k));
+    const stPts=Math.max(0,inOrd.size-badSteps.length), stScore=stPts/good.length;
+    const learner=order.map((k,i)=>{ const g=INTU_STEPS.find(s=>s[0]===k), b=INTU_BAD.find(s=>s[0]===k);
+      return {n:i+1,t:(g||b)[1],st:b?'bad':inOrd.has(k)?'ok':'ord',why:b?INTU_WHY[k]:inOrd.has(k)?'':'ควรอยู่ลำดับที่ '+(good.indexOf(k)+1)}; });
+    const key=INTU_STEPS.map(([k,t],i)=>({n:i+1,t,why:INTU_WHY[k],st:!order.includes(k)?'miss':inOrd.has(k)?'ok':'ord'}));
+    const missSteps=good.filter(k=>!order.includes(k));
+    const items=[...eq.map(([l,o])=>[l,o]),
+      ...missSteps.map(k=>['ขาดขั้นตอน: '+INTU_STEPS.find(s=>s[0]===k)[1],false]),
+      ...good.filter(k=>order.includes(k)&&!inOrd.has(k)).map(k=>['ทำผิดลำดับ: '+INTU_STEPS.find(s=>s[0]===k)[1],false]),
+      ...badSteps.map(k=>['เลือกขั้นตอนที่ไม่ควรทำ: '+INTU_BAD.find(s=>s[0]===k)[1],false])];
+    if(!missSteps.length&&inOrd.size===good.length&&!badSteps.length) items.push(['ขั้นตอนการช่วยใส่ท่อครบและถูกลำดับ ('+good.length+'/'+good.length+')',true]);
+    const score=Math.round((eqScore*.4+stScore*.6)*100)/100;
+    try{ propETT(); }catch(e){}
+    done({task:'intubate',score,items,parts:{eq:{score:eqScore,rows:eq},st:{score:stScore,pts:stPts,max:good.length,learner,key}}}); }
+}
+const INTU_WHY={handle:'ด้ามจับ laryngoscope ต้องคู่กับ blade และตรวจว่าไฟสว่าง',
+ blade:'เลือก blade ตามขนาดผู้ป่วย',ett:'เลือกขนาดท่อตามเพศ/ตัวผู้ป่วย และเตรียมเล็กกว่า 1 ขนาดสำรอง',
+ stylet:'ช่วยดัดท่อให้เป็นรูปโค้ง ใส่ง่ายขึ้น (ปลายไม่เลยปลายท่อ)',syr10:'ใช้ทดสอบ cuff ก่อนใส่ และใส่ลม cuff หลังท่อผ่านสายเสียง',
+ ky:'หล่อลื่นปลายท่อและ cuff ลดการบาดเจ็บ',etco2:'มาตรฐานยืนยันว่าท่ออยู่ในหลอดลม (มีคลื่น ETCO₂ ต่อเนื่อง)',
+ holder:'ยึดท่อไม่ให้เลื่อนหลุดหรือลึกลงไปข้างเดียว',bvm:'ใช้ preoxygenate และช่วยหายใจหลังใส่ท่อ ต่อ O₂ 15 L/min',
+ yank:'ต้องพร้อมดูดเสมหะ/อาเจียนทันทีเพื่อป้องกันสำลัก',steth:'ฟังเสียงปอดทั้ง 2 ข้างและกระเพาะอาหารเพื่อยืนยันตำแหน่ง',
+ check:'ตรวจอุปกรณ์ก่อนเสมอ: ไฟ blade สว่าง cuff ไม่รั่ว ใส่ stylet',
+ preox:'เพิ่มออกซิเจนสำรองในปอด ช่วยยืดเวลาก่อน SpO₂ ตกระหว่างใส่ท่อ',
+ pos:'sniffing position จัดแนวแกนปาก–คอหอย–กล่องเสียง ให้แพทย์เห็น glottis · suction พร้อมใช้',
+ hand:'ส่งอุปกรณ์ถูกทิศเข้ามือแพทย์ แพทย์ไม่ต้องละสายตาจาก glottis',
+ cuff:'ถอด stylet ก่อน แล้วใส่ลม cuff 5–10 ml (แรงดัน cuff 20–30 cmH₂O)',
+ confirm:'ยืนยันด้วย ETCO₂/capnography + ฟังเสียงปอดทั้ง 2 ข้างและกระเพาะ ก่อนยึดท่อ',
+ secure:'ยึดท่อหลังยืนยันตำแหน่งแล้วเท่านั้น และบันทึกระดับที่มุมปาก',
+ vent:'ช่วยหายใจ 10 ครั้ง/นาที (ทุก 6 วินาที) หลีกเลี่ยงการบีบเร็วเกินไป',
+ cuff20:'ลม cuff มากเกินทำให้แรงดันสูง เนื้อเยื่อหลอดลมขาดเลือดและบาดเจ็บ ควรใช้ 5–10 ml และวัดแรงดัน 20–30 cmH₂O',
+ secureFirst:'ถ้าท่อเข้าหลอดอาหาร จะยึดท่อผิดตำแหน่งไว้ ต้องยืนยันตำแหน่งก่อนยึดเสมอ',
+ stomach:'ฟังกระเพาะอย่างเดียวไม่พอ ต้องใช้ ETCO₂ ร่วมกับฟังเสียงปอดทั้ง 2 ข้าง'};
+/* shared result renderer: parts (equipment + steps) with answer key; fallback to flat list */
+function assistResHTML(eyebrow,title,res){
+  const li=([l,o,w])=>`<li><span class="sev ${o?'':'c'}" style="${o?'background:var(--ok)':''}"></span><span>${o?'✓':'✗'} ${esc(l)}${!o&&w?`<br><span class="muted" style="font-size:12px">เฉลย: ${esc(w)}</span>`:''}</span></li>`;
+  const head=`<div class="mhead"><div><div class="eyebrow">${esc(eyebrow)}</div><h2 style="font-size:19px">${esc(title)}${Math.round(res.score*100)}%</h2></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>`;
+  if(!res.parts) return head+`<ul class="err-list">${res.items.map(li).join('')}</ul>`;
+  const P=res.parts, pc=x=>Math.round(x*100)+'%';
+  const bar=(lab,x,w)=>`<div class="ar-part"><div class="flex"><b>${lab}</b><span class="mono right-al" style="color:${x>=.8?'var(--ok)':x>=.6?'var(--gold)':'var(--crit,#e5534b)'}">${pc(x)}</span></div><div class="ar-bar"><i style="width:${pc(x)}"></i></div><div class="muted" style="font-size:12px">น้ำหนัก ${w}</div></div>`;
+  const badge={ok:['✓','var(--ok)','ถูกลำดับ'],ord:['↕','var(--gold)','ผิดลำดับ'],bad:['✗','var(--crit,#e5534b)','ไม่ควรทำ'],miss:['—','var(--crit,#e5534b)','ไม่ได้เลือก']};
+  const row=(r,showWhy)=>{ const [ic,col,lab]=badge[r.st]; return `<li class="ar-row"><span class="ar-n mono">${r.n}</span><span>${esc(r.t)}${(showWhy||r.st!=='ok')&&r.why?`<br><span class="muted" style="font-size:12px">${esc(r.why)}</span>`:''}</span><span class="ar-tag" style="color:${col};border-color:${col}">${ic} ${lab}</span></li>`; };
+  const missEq=P.eq.rows.filter(r=>!r[1]);
+  return head+`<div class="ar-sum">${bar('1. เตรียมอุปกรณ์',P.eq.score,'40%')}${bar('2. ขั้นตอนการช่วยใส่ท่อ ('+P.st.pts+'/'+P.st.max+')',P.st.score,'60%')}</div>
+   <div class="ar-tabs"><button class="chip" data-ar="st" aria-pressed="true">ขั้นตอน & เฉลย</button><button class="chip" data-ar="eq" aria-pressed="false">อุปกรณ์${missEq.length?` · ขาด ${missEq.length}`:''}</button></div>
+   <div data-arp="st"><h3 class="ar-h">ลำดับที่คุณเลือก</h3><ol class="ar-list">${P.st.learner.length?P.st.learner.map(r=>row(r,false)).join(''):'<li class="muted">ไม่ได้เลือกขั้นตอน</li>'}</ol>
+     <h3 class="ar-h">เฉลย: ลำดับที่ถูกต้อง</h3><ol class="ar-list key">${P.st.key.map(r=>row(r,true)).join('')}</ol>
+     <p class="muted" style="font-size:12px;margin:4px 0 0">คิดคะแนน: ขั้นตอนที่อยู่ในลำดับถูกได้ข้อละ 1 คะแนน · เลือกขั้นตอนที่ไม่ควรทำหัก 1 คะแนนต่อข้อ</p></div>
+   <div data-arp="eq" hidden>${missEq.length?`<h3 class="ar-h">สิ่งที่ขาด/ผิด และเหตุผล</h3><ul class="err-list">${missEq.map(li).join('')}</ul>`:''}<h3 class="ar-h">ถาดอุปกรณ์ทั้งหมด</h3><ul class="err-list">${P.eq.rows.filter(r=>r[1]).map(li).join('')}</ul></div>`;
+}
+function wireAssistRes(){ $$('#mbox [data-ar]').forEach(b=>b.onclick=()=>{ $$('#mbox [data-ar]').forEach(x=>x.setAttribute('aria-pressed',x===b)); $$('#mbox [data-arp]').forEach(p=>p.hidden=p.dataset.arp!==b.dataset.ar); });
+  const m=$('#mbox'); if(m&&$('#mbox .ar-sum')) m.classList.add('wide'); }
+(()=>{ const st=document.createElement('style'); st.textContent=`
+ .ar-sum{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:560px){.ar-sum{grid-template-columns:1fr}}
+ .ar-part{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px 12px}
+ .ar-bar{height:6px;border-radius:4px;background:rgba(255,255,255,.08);margin:6px 0 4px;overflow:hidden}.ar-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--teal,#2bb3a3),var(--gold,#d9b45a))}
+ .ar-tabs{display:flex;gap:6px;margin-top:4px}.ar-h{font-size:14px;margin:10px 0 6px}
+ .ar-list{list-style:none;padding:0;margin:0;display:grid;gap:6px}.ar-row{display:grid;grid-template-columns:26px 1fr auto;gap:8px;align-items:start;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:8px 10px;font-size:14px}
+ .ar-n{color:var(--gold,#d9b45a);font-weight:700}.ar-tag{font-size:11.5px;border:1px solid;border-radius:999px;padding:2px 8px;white-space:nowrap}
+ .ar-list.key .ar-row{background:rgba(43,179,163,.06)}`; document.head.appendChild(st); })();
+function propETT(){ if(!G3.ok||!W3.pt||W3.ett||!C||!C.arrived) return; const h=W3.pt.userData.parts.head; const g=new THREE.Group(); g.position.set(0,-.045,.1); h.add(g);
+  g.add(mesh(new THREE.CylinderGeometry(.008,.008,.16,10),new THREE.MeshPhysicalMaterial({color:'#f4fbff',transmission:.4,transparent:true,opacity:.9}),0,.0,.06,false)).rotation.x=Math.PI/2;
+  g.add(mesh(new THREE.BoxGeometry(.05,.012,.02),M('#3a7bd5'),0,0,.02,false)); W3.ett=g; const v=vitShow(); v.spo2=Math.max(v.spo2,95); W3.bvmOn=true; try{ PROP.bvm(); }catch(e){} }
+{ const _fr=fxReset; fxReset=function(){ _fr(); if(W3.ett&&W3.ett.parent) W3.ett.parent.remove(W3.ett); W3.ett=null; }; }
+
+/* ---------- assist tasks requested by the ERT doctor ---------- */
+const ASSIST={
+ AR1:{kind:'intubate',say:'SpO₂ ยังไม่ดีขึ้น ผู้ป่วยไม่สามารถป้องกันทางเดินหายใจได้ เตรียมใส่ท่อช่วยหายใจครับ',btn:'ช่วยแพทย์: เตรียมใส่ท่อช่วยหายใจ'},
+ AH3:{kind:'intubate',say:'ปากและลำคอบวมมากขึ้น เตรียมใส่ท่อช่วยหายใจทันทีครับ',btn:'ช่วยแพทย์: เตรียมใส่ท่อช่วยหายใจ'},
+ AN3:{kind:'intubate',say:'ระดับความรู้สึกตัวลดลง หายใจช้า เตรียมใส่ท่อช่วยหายใจเพื่อป้องกันทางเดินหายใจครับ',btn:'ช่วยแพทย์: เตรียมใส่ท่อช่วยหายใจ'},
+ A7:{kind:'pace',say:'ให้ atropine แล้วชีพจรยังช้า ความดันต่ำ เตรียม transcutaneous pacing ครับ',btn:'ช่วยแพทย์: Transcutaneous pacing',rhythm:'brady'},
+ AC3:{kind:'sync',say:'vagal maneuver และ adenosine ไม่ได้ผล ความดันเริ่มต่ำ เตรียม synchronized cardioversion 100 จูลครับ',btn:'ช่วยแพทย์: Synchronized cardioversion',rhythm:'svt'},
+};
+const ASSIST_TXT={intubate:'ช่วยแพทย์ใส่ท่อช่วยหายใจ',pace:'ช่วยแพทย์ทำ transcutaneous pacing',sync:'ช่วยแพทย์ทำ synchronized cardioversion'};
+function openAssist(){ const A=ASSIST[C.id]; if(!A) return; const cs=C.cs;
+  const done=res=>{ C.assistDone=true; C.assistRes=res; gradeAssist(res); rCare(); if(res.task!=='intubate'&&res.score>=.6){ const v=vitShow(); if(res.task==='pace'){ v.hr=70; v.sbp=Math.max(v.sbp,104); } if(res.task==='sync'){ v.hr=96; v.sbp=Math.max(v.sbp,110); } } };
+  if(A.kind==='intubate') intubationTask(cs,done);
+  else ZOLL.open({task:A.kind,rhythm:A.rhythm,exam:!!(S&&S.exam),title:A.btn.replace('ช่วยแพทย์: ',''),kicker:'ช่วยแพทย์ ERT · ZOLL R Series',
+    brief:A.kind==='pace'?'แพทย์: “เตรียม transcutaneous pacing · ตั้ง rate 70 แล้วเพิ่ม output จนจับ capture” · ติด pads แบบหน้า–หลัง และ ECG leads (pacer ต้องใช้ ECG) → โหมด PACER → ตั้ง rate → เพิ่ม mA จนเห็น capture → ตรวจชีพจร femoral':
+      'แพทย์: “synchronized cardioversion 100 J” · ติด pads + ECG leads → DEFIB → เปิด SYNC (เห็นเครื่องหมายเหนือ R wave) → เลือกพลังงาน → CHARGE → ประกาศถอยออก → SHOCK → ตรวจคลื่นและชีพจร',
+    onDone:r=>{ if(r) done(r); }}); }
+function gradeAssist(res){ const ok=res.score>=.8; itm('assist:'+res.task,ok,'o');
+  res.items.filter(i=>!i[1]).forEach(i=>{ const code='ASSIST:'+res.task+':'+i[0]; ASSIST_ERR[code]=ASSIST_TXT[res.task]+': '+i[0]; addErr(code); });
+  const adj=res.score>=.9?2:-Math.round((1-res.score)*4); C.dom.care=Math.max(0,Math.min(20,(C.dom.care||0)+adj)); updScore();
+  if(!(S&&S.exam)){ modal(assistResHTML('ผลการช่วยแพทย์',ASSIST_TXT[res.task]+' · ',res)); wireAssistRes(); } }
+const ASSIST_ERR={};
+{ const _e=errLabel; errLabel=function(c){ if(c.startsWith('ASSIST:')) return ASSIST_ERR[c]||('ช่วยแพทย์: '+c.split(':').slice(2).join(':')); if(c==='ASSIST_SKIP') return 'ยังไม่ได้ช่วยแพทย์ตามที่ทีม ERT ขอ'; return _e(c); }; }
+{ const _il=itemLabel; itemLabel=function(id,k){ return k.startsWith('assist:')?(ASSIST_TXT[k.slice(7)]||k):_il(id,k); }; }
+{ const _a=arriveTeam; arriveTeam=function(){ const was=C&&C.arrived; _a(); if(was||!C) return; const A=ASSIST[C.id]; if(!A) return; const cid=GS.caseId;
+    setTimeout(()=>{ if(!C||GS.caseId!==cid) return; C.assistPending=true; sayAs('md',A.say); rCare(); },7000); }; }
+{ const _r=rCare; rCare=function(){ _r(); const A=C&&ASSIST[C.id];
+    if(C&&C.arrived&&A&&C.assistPending&&!C.assistDone) setFoot([{id:'bAs',t:'🩺 '+A.btn+' →',cls:'gold',on:openAssist},{id:'bH2',t:'ข้ามไปส่งต่อข้อมูล',cls:'ghost sm',on:()=>{ addErr('ASSIST_SKIP'); itm('assist:'+A.kind,0,'o'); C.dom.care=Math.max(0,(C.dom.care||0)-2); C.assistDone=true; go('handover'); }}]);
+    // once the cart is at the bedside, it can be opened
+    const ap=$('#actionPanel'); if(C&&C.done.has('cart')&&ap&&!ap.hidden&&!$('#openCart')){ const b=document.createElement('button'); b.id='openCart'; b.className='act'; b.innerHTML='<span class="ic">🧰</span><span>เปิดรถ Emergency cart ดูยาและอุปกรณ์<small>ไม่เสียเวลา · สำรวจเท่านั้น</small></span>'; b.onclick=()=>cartModal(); ap.querySelector('.tray-tabs')?.before(b); } }; }
+
+/* ---------- equipment lab on the level screen ---------- */
+function labCard(){ const host=$('#scr-level .lv-wrap'); if(!host||$('#labCard')||!$('.lvc-grid')) return; const c=document.createElement('div'); c.id='labCard'; c.className='glass card';
+  c.innerHTML=`<div class="flex"><div><div class="eyebrow">Equipment lab · ฝึกนอกเคส</div><h3 style="font-size:18px;margin:2px 0">Emergency cart · ZOLL R Series · ช่วยใส่ท่อช่วยหายใจ</h3><div class="muted" style="font-size:13px">ฝึกใช้เครื่องก่อนลงสถานการณ์จริง และเป็นพื้นฐานของ Code 8 / CPR</div></div></div>
+   <div class="lab-grid">${[['cart','🧰 สำรวจ Emergency cart'],['manual','⚡ Manual defib · VF'],['aed','🟥 AED mode · VF'],['sync','〽️ Sync cardioversion · SVT'],['pace','💓 Transcutaneous pacing · Brady'],['intu','🫁 ช่วยแพทย์ใส่ ET tube'],['free','🖥️ ทดลองเครื่องอิสระ']].map(([k,l])=>`<button class="btn" data-lab="${k}">${l}</button>`).join('')}</div>`;
+  host.appendChild(c);
+  $$('#labCard [data-lab]').forEach(b=>b.onclick=()=>{ const k=b.dataset.lab; const show=r=>{ if(!r) return; modal(assistResHTML('ผลการฝึก','',r)); wireAssistRes(); };
+    if(k==='cart') return cartModal();
+    if(k==='intu') return intubationTask({p:{sex:'M',ageTxt:'60 ปี'}},show);
+    const B={manual:['VF: ผู้ป่วยหมดสติ ไม่หายใจ ไม่มีชีพจร ทีมกำลังกดหน้าอก','vf','ติด pads → DEFIB → เลือก 120–200 J → CHARGE ระหว่างกดหน้าอก → หยุดกด ประกาศถอยออก → SHOCK → กดหน้าอกต่อทันที 2 นาที → ตรวจคลื่น/ชีพจร'],
+      aed:['AED: ผู้ป่วยหมดสติ ไม่มีชีพจร','vf','ติด pads → โหมด AED → หยุดกดหน้าอก กด ANALYZE → ถ้าแนะนำ shock ประกาศถอยออก → SHOCK → CPR ต่อทันที'],
+      sync:['SVT 182 ความดันเริ่มต่ำ แพทย์สั่ง synchronized cardioversion','svt','ติด pads + ECG leads → DEFIB → เปิด SYNC → 50–120 J → CHARGE → ประกาศถอยออก → SHOCK → ตรวจคลื่นและชีพจร'],
+      pace:['Sinus bradycardia 38 ความดันต่ำ ไม่ตอบสนองต่อ atropine','brady','ติด pads หน้า–หลัง + ECG leads → PACER → rate 60–80 → เพิ่ม mA จน capture → ตรวจชีพจร'],
+      free:['ทดลองใช้เครื่องอิสระ','sinus','']}[k];
+    ZOLL.open({task:k==='free'?'explore':k,rhythm:B[1],title:B[0],brief:B[2]?'ขั้นตอน: '+B[2]:'',convertAt:k==='manual'?2:1,onDone:show}); }); }
+{ const _ol=openLevels; openLevels=function(){ _ol(); labCard(); }; }
+{ const st=document.createElement('style'); st.textContent=`
+.cart-ui{display:grid;grid-template-columns:240px minmax(0,1fr);gap:12px}.cart-drawers{display:grid;gap:6px;align-content:start;background:linear-gradient(#b3202c,#8e1820);padding:10px;border-radius:12px}
+.drawer{display:flex;gap:8px;align-items:center;text-align:left;padding:12px 10px;border-radius:8px;background:#d33b45;color:#fff;border:1px solid rgba(255,255,255,.25);font-size:13px;font-weight:600}
+.drawer .handle{width:26px;height:6px;border-radius:3px;background:#e8e8e8;flex:none}.drawer.on{background:#f4f4f4;color:#7a1219}.drawer small{margin-left:auto;background:var(--gold);color:#2a1d00;border-radius:999px;padding:0 7px}
+.cart-items{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px;align-content:start;max-height:56vh;overflow:auto}
+.ci{text-align:left;padding:10px;border-radius:10px;border:1px solid var(--line);background:#0b1a2e;font-size:13px;line-height:1.35}.ci.on{border-color:var(--gold);background:rgba(245,190,70,.14)}
+.lab-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+@media (max-width:820px){ .cart-ui{grid-template-columns:1fr} }`; document.head.appendChild(st); }
+/* ================================================================
+   ZOLL R SERIES — defibrillator / monitor / pacer simulator (2D, canvas screen)
+   ZOLL.open({task,rhythm,title,brief,onDone,exam})
+   tasks: 'manual' (VF/pVT) · 'aed' · 'sync' (SVT) · 'pace' (brady) · 'explore'
+   ================================================================ */
+const ZRH={   // rhythm library: rate, regular, morphology
+ sinus:{lab:'Sinus rhythm',rate:88},stach:{lab:'Sinus tachycardia',rate:118},brady:{lab:'Sinus bradycardia',rate:38},svt:{lab:'SVT',rate:182,noP:1},
+ af:{lab:'Atrial fibrillation',rate:120,irr:1,noP:1},vt:{lab:'Ventricular tachycardia',rate:180,wide:1,noP:1},vf:{lab:'Ventricular fibrillation',vf:1},asys:{lab:'Asystole',flat:1}};
+const ZE=[1,2,3,5,7,10,15,20,30,50,70,85,100,120,150,200];
+const ZOLL={
+ open(o){ this.o=Object.assign({task:'explore',rhythm:'sinus'},o||{}); const z=this.z={mode:'OFF',e:120,charged:false,charging:0,sync:false,lead:'PADS',pads:false,leads:false,rate:70,ma:0,cpr:false,clear:false,
+     rh:this.o.rhythm,beats:[],next:0,t:0,x:0,last:null,msg:'',msgT:0,shocks:0,log:[],t0:performance.now(),capThr:this.o.capThr||70,aed:null,pulseChecked:false,converted:false,syncFired:0,cprAfterShock:null,chargeDuringCpr:false,clearBeforeShock:true,syncPending:false};
+   this.build(); this.loop(); this.say('เปิดเครื่อง: หมุนปุ่มเลือกโหมด'); },
+ close(res){ cancelAnimationFrame(this.raf); this.raf=null; const el=$('#zoll'); el&&el.remove(); clearTimeout(this.cT); if(this.o.onDone) this.o.onDone(res||null); },
+ L(ev){ const z=this.z; z.log.push([((performance.now()-z.t0)/1000).toFixed(0),ev]); this.renderLog(); },
+ say(m,ms=4000){ this.z.msg=m; this.z.msgT=performance.now()+ms; },
+ build(){ $('#zoll')?.remove(); const d=document.createElement('div'); d.id='zoll'; const o=this.o;
+   d.innerHTML=`<div class="zl-card glass"><div class="zl-head"><div><div class="eyebrow">${esc(o.kicker||'Defibrillator · ZOLL R Series')}</div><h2 style="font-size:19px">${esc(o.title||'ฝึกใช้ Defibrillator')}</h2></div><button class="iconbtn" id="zlX" aria-label="ปิด">✕</button></div>
+   ${o.brief?`<div class="zl-brief">${o.brief}</div>`:''}
+   <div class="zl-wrap"><div class="zl-dev">
+     <div class="zl-brand">ZOLL <span>R Series</span></div>
+     <div class="zl-screenbox"><canvas id="zlScr" width="720" height="420"></canvas></div>
+     <div class="zl-soft"><button data-z="lead">LEAD</button><button data-z="sync" class="zsy">SYNC</button><button data-z="analyze">ANALYZE</button><button data-z="pulse">ตรวจชีพจร</button></div>
+     <div class="zl-attach"><button data-z="pads">ติด Pads (แผ่นนำไฟฟ้า)</button><button data-z="leads">ติด ECG 3 leads</button><button data-z="cpr">กดหน้าอก (CPR)</button><button data-z="clear" class="zclr">ประกาศ “ทุกคนถอยออก”</button></div>
+   </div>
+   <div class="zl-ctrl">
+     <div class="zl-knob"><div class="eyebrow">MODE</div>${['OFF','MONITOR','DEFIB','PACER','AED'].map(m=>`<button data-mode="${m}">${m}</button>`).join('')}</div>
+     <div class="zl-grp"><div class="eyebrow">1 · ENERGY SELECT</div><div class="flex"><button data-z="eDn">▼</button><b id="zlE">120 J</b><button data-z="eUp">▲</button></div></div>
+     <button class="zl-big zl-charge" data-z="charge">2 · CHARGE</button>
+     <button class="zl-big zl-shock" data-z="shock">3 · SHOCK</button>
+     <div class="zl-grp"><div class="eyebrow">PACER RATE (ppm)</div><div class="flex"><button data-z="rDn">▼</button><b id="zlR">70</b><button data-z="rUp">▲</button></div></div>
+     <div class="zl-grp"><div class="eyebrow">PACER OUTPUT (mA)</div><div class="flex"><button data-z="mDn">▼</button><b id="zlM">0</b><button data-z="mUp">▲</button></div></div>
+   </div>
+   <div class="zl-side"><div class="eyebrow">ขั้นตอน / บันทึก</div><div id="zlLog" class="zl-log"></div><div class="flex" style="margin-top:8px"><button class="btn primary right-al" id="zlDone">${o.task==='explore'?'ปิด':'เสร็จสิ้นการช่วยแพทย์'}</button></div></div></div></div>`;
+   document.body.appendChild(d);
+   $('#zlX').onclick=()=>this.close(this.o.task==='explore'?null:this.grade()); $('#zlDone').onclick=()=>this.close(this.o.task==='explore'?null:this.grade());
+   $$('#zoll [data-mode]').forEach(b=>b.onclick=()=>this.setMode(b.dataset.mode)); $$('#zoll [data-z]').forEach(b=>b.onclick=()=>this.key(b.dataset.z));
+   this.renderLog(); this.syncUI(); },
+ syncUI(){ const z=this.z; $$('#zoll [data-mode]').forEach(b=>b.classList.toggle('on',b.dataset.mode===z.mode)); $('#zlE').textContent=z.e+' J'; $('#zlR').textContent=z.rate; $('#zlM').textContent=z.ma;
+   const t=(k,on)=>{ const b=$(`#zoll [data-z="${k}"]`); b&&b.classList.toggle('on',!!on); }; t('pads',z.pads); t('leads',z.leads); t('cpr',z.cpr); t('sync',z.sync); t('clear',z.clear);
+   $('#zoll .zl-shock').classList.toggle('ready',z.charged); },
+ renderLog(){ const el=$('#zlLog'); if(!el) return; el.innerHTML=this.z.log.slice(-14).map(([t,e])=>`<div><span class="mono muted">${t}s</span> ${esc(e)}</div>`).join('')||'<div class="muted">ยังไม่มีการใช้งาน</div>'; el.scrollTop=1e5; },
+ setMode(m){ const z=this.z; if(z.mode===m) return; z.mode=m; z.charged=false; z.charging=0; if(m!=='DEFIB') z.sync=false; if(m==='AED') z.lead='PADS'; if(m==='PACER'){ z.ma=0; }
+   z.wipe=true; this.L('โหมด '+m); this.say({OFF:'ปิดเครื่อง',MONITOR:'โหมด Monitor',DEFIB:'MANUAL DEFIB · เลือกพลังงาน',PACER:'PACER · ต้องติด ECG leads และ pads',AED:'AED MODE · กด ANALYZE'}[m]);
+   if(m==='AED'){ try{ speak('เครื่อง เออีดี พร้อม ติดแผ่นนำไฟฟ้า แล้วกดวิเคราะห์',{who:'op'}); }catch(e){} } this.syncUI(); },
+ key(k){ const z=this.z, on=z.mode!=='OFF';
+   if(k==='pads'){ z.pads=!z.pads; this.L(z.pads?(this.o.task==='pace'?'ติด pads: หน้าอกซ้าย + หลังใต้สะบักซ้าย (anterior–posterior)':'ติด pads: ใต้ไหปลาร้าขวา + ใต้ราวนมซ้าย (anterior–lateral)'):'ถอด pads'); }
+   else if(k==='leads'){ z.leads=!z.leads; this.L(z.leads?'ติด ECG 3 leads':'ถอด ECG leads'); if(z.leads&&z.lead==='PADS'&&this.o.task==='pace') null; }
+   else if(k==='cpr'){ z.cpr=!z.cpr; this.L(z.cpr?'เริ่มกดหน้าอก 100–120 ครั้ง/นาที ลึก 5–6 cm':'หยุดกดหน้าอก'); if(z.cpr&&z.cprAfterShock===false){ z.cprAfterShock=performance.now()-z.lastShock<6000; } }
+   else if(k==='clear'){ z.clear=true; this.L('ประกาศ “ฉันถอย คุณถอย ทุกคนถอย · O₂ ออก”'); try{ speak('ทุกคน ถอยออก จากเตียง',{who:'player'}); }catch(e){} setTimeout(()=>{ z.clear=false; this.syncUI(); },6000); }
+   else if(!on){ this.say('เครื่องยังปิดอยู่ · เลือกโหมดก่อน'); }
+   else if(k==='lead'){ const L=['PADS','I','II','III']; z.lead=L[(L.indexOf(z.lead)+1)%4]; this.L('Lead '+z.lead); }
+   else if(k==='sync'){ if(z.mode!=='DEFIB'){ this.say('SYNC ใช้ในโหมด DEFIB'); } else { z.sync=!z.sync; this.L(z.sync?'เปิด SYNC (มีเครื่องหมายเหนือ R wave)':'ปิด SYNC'); } }
+   else if(k==='eUp'||k==='eDn'){ if(z.mode!=='DEFIB'){ this.say('เลือกพลังงานในโหมด DEFIB'); } else { const i=ZE.indexOf(z.e); z.e=ZE[Math.max(0,Math.min(ZE.length-1,i+(k==='eUp'?1:-1)))]; if(z.charged){ z.charged=false; this.say('พลังงานเปลี่ยน · ประจุถูกยกเลิก'); } } }
+   else if(k==='rUp'||k==='rDn'){ if(z.mode!=='PACER') this.say('ปรับ rate ในโหมด PACER'); else { z.rate=Math.max(30,Math.min(180,z.rate+(k==='rUp'?5:-5))); this.L('Pacer rate '+z.rate); } }
+   else if(k==='mUp'||k==='mDn'){ if(z.mode!=='PACER') this.say('ปรับ output ในโหมด PACER'); else { z.ma=Math.max(0,Math.min(140,z.ma+(k==='mUp'?10:-10))); this.L('Pacer output '+z.ma+' mA'); } }
+   else if(k==='charge'){ if(z.mode==='AED'){ this.say('AED ประจุไฟเองหลังวิเคราะห์'); } else if(z.mode!=='DEFIB') this.say('CHARGE ใช้ในโหมด DEFIB'); else if(!z.pads) this.say('ATTACH PADS · ยังไม่ได้ติด pads'); else this.charge(); }
+   else if(k==='shock') this.shock();
+   else if(k==='analyze') this.analyze();
+   else if(k==='pulse'){ z.pulseChecked=true; const pulse=this.hasPulse(); this.L('ตรวจชีพจร carotid/femoral: '+(pulse?'คลำได้':'คลำไม่ได้')); this.say(pulse?'คลำชีพจรได้':'ไม่มีชีพจร · CPR ต่อ'); }
+   this.syncUI(); },
+ charge(){ const z=this.z; z.charged=false; z.charging=performance.now()+2600; if(z.cpr) z.chargeDuringCpr=true; this.L(`Charge ${z.e} J`+(z.cpr?' (ขณะกดหน้าอกต่อเนื่อง)':'')); beep(520,2.4,.025,'sawtooth'); },
+ hasPulse(){ const r=this.z.rh; if(['vf','asys'].includes(r)) return false; if(r==='vt') return this.o.pulse!==false&&this.o.task!=='manual'&&this.o.task!=='aed'; if(r==='paced') return this.z.captured; return true; },
+ shock(){ const z=this.z;
+   if(z.mode==='AED'){ if(!z.aed||z.aed.st!=='ready'){ this.say('กด ANALYZE ก่อน'); return; } }
+   else if(z.mode!=='DEFIB'){ this.say('SHOCK ใช้ในโหมด DEFIB/AED'); return; }
+   if(!z.charged){ this.say('ยังไม่ได้ CHARGE'); return; }
+   if(!z.clear){ z.clearBeforeShock=false; this.L('⚠ shock โดยยังไม่ได้ประกาศให้ทุกคนถอยออก'); }
+   if(z.cpr){ this.L('⚠ shock ขณะยังกดหน้าอกอยู่'); z.shockDuringCpr=true; }
+   if(z.sync&&z.mode==='DEFIB'){ if(['vf','asys'].includes(z.rh)){ this.say('SYNC: ไม่พบ R wave · เครื่องไม่ปล่อยไฟ',5000); this.L('SYNC เปิดอยู่ใน VF: เครื่องรอ R wave ไม่ปล่อยไฟ'); z.syncStuck=true; return; } z.syncPending=true; this.say('SYNC · กดค้างรอ R wave…'); return; }
+   this.deliver(); },
+ deliver(){ const z=this.z, r=z.rh, E=z.mode==='AED'?(z.aed.e):z.e; z.charged=false; z.shocks++; z.lastShock=performance.now(); z.cprAfterShock=false; z.flash=performance.now();
+   beep(140,.25,.09,'square'); this.L(`SHOCK ${E} J ${z.sync?'(synchronized)':''} · ครั้งที่ ${z.shocks}`);
+   if(['vf','vt'].includes(r)&&!z.sync){ if(E>=120&&z.shocks>=(this.o.convertAt||2)) this.setRhythm(this.o.after||'sinus','กลับเป็นจังหวะ sinus หลัง shock'); else this.say('ยังเป็น '+ZRH[r].lab+' · CPR ต่อ 2 นาที',5000); }
+   else if(['svt','af'].includes(r)&&z.sync){ if(E>=50&&E<=200){ this.setRhythm('sinus','Cardioversion สำเร็จ: กลับเป็น sinus'); z.converted=true; } }
+   else if(['svt','af','sinus','stach','brady','vt'].includes(r)&&!z.sync){ this.setRhythm('vf','⚠ shock ไม่ sync บน T wave ทำให้เกิด VF'); z.rOnT=true; }
+   else if(r==='asys'){ this.L('⚠ Asystole ไม่ใช่ shockable rhythm'); z.asysShock=true; }
+   if(z.mode==='AED'){ z.aed={st:'post'}; this.say('ส่งไฟฟ้าแล้ว · เริ่ม CPR ทันที 2 นาที',6000); try{ speak('ช็อกแล้ว เริ่มกดหน้าอกทันที',{who:'op'}); }catch(e){} }
+   this.syncUI(); },
+ analyze(){ const z=this.z; if(z.mode!=='AED'){ this.say('ANALYZE ใช้ในโหมด AED'); return; } if(!z.pads){ this.say('ATTACH PADS'); return; }
+   if(z.cpr){ z.cprDuringAnalyze=true; this.L('⚠ วิเคราะห์ขณะยังกดหน้าอก: ต้องหยุด CPR'); this.say('MOTION DETECTED · หยุดกดหน้าอก',5000); return; }
+   z.aed={st:'an'}; this.say('ANALYZING ECG · ห้ามสัมผัสผู้ป่วย',4000); this.L('AED วิเคราะห์คลื่น'); try{ speak('กำลังวิเคราะห์ ห้ามสัมผัสผู้ป่วย',{who:'op'}); }catch(e){}
+   this.cT=setTimeout(()=>{ if(!this.raf) return; const shockable=['vf','vt'].includes(z.rh); if(shockable){ const n=z.shocks; z.aed={st:'ready',e:n===0?120:n===1?150:200}; z.charged=true; this.say('SHOCK ADVISED · PRESS SHOCK',8000); this.L('SHOCK ADVISED · ประจุ '+z.aed.e+' J');
+       try{ speak('แนะนำให้ช็อก ทุกคนถอยออก กดปุ่มช็อก',{who:'op'}); }catch(e){} } else { z.aed={st:'none'}; this.say('NO SHOCK ADVISED · เริ่ม CPR',6000); this.L('NO SHOCK ADVISED'); } this.syncUI(); },4200); },
+ setRhythm(r,msg){ this.z.rh=r; this.say(msg,6000); this.L(msg); },
+ // ECG morphology
+ beatShape(dt,R){ const g=(x,m,s,a)=>a*Math.exp(-((x-m)*(x-m))/(2*s*s)); const w=R.wide?2.4:1;
+   let y=0; if(!R.noP) y+=g(dt,-.16,.025,.12); y+=g(dt,-.012*w,.008*w,-.12)+g(dt,0,.011*w,R.wide?.9:1.1)+g(dt,.016*w,.009*w,-.25); y+=g(dt,.22+(R.wide?.05:0),.045,R.wide?-.35:.28); return y; },
+ rhythmVal(t){ const z=this.z;
+   if(z.rh==='vf') return .35*Math.sin(t*31)+.25*Math.sin(t*23.7+1)+.18*Math.sin(t*41+2)*Math.sin(t*1.7);
+   if(z.rh==='asys') return .02*Math.sin(t*1.3)+.01*Math.sin(t*7);
+   const paced=z.mode==='PACER'&&z.leads&&z.ma>0; let R=ZRH[z.rh]||ZRH.sinus, rate=R.rate;
+   z.captured=paced&&z.ma>=z.capThr; if(z.captured){ rate=z.rate; R={wide:1,noP:1}; }
+   while(t>=z.next){ z.beats.push(z.next); const base=60/rate; z.next+=R.irr?base*(.7+Math.random()*.6):base; if(z.beats.length>6) z.beats.shift(); if(z.sync&&z.syncPending) { z.syncPending=false; setTimeout(()=>{ if(this.raf) { this.z.syncFired++; this.deliver(); } },20); } }
+   let y=0; for(const b of z.beats) y+=this.beatShape(t-b-.18,R);
+   if(paced){ const p=60/z.rate, ph=t%p; if(ph<.012) y+=1.6; }    // pacing spike
+   return y; },
+ loop(){ const c=$('#zlScr'); if(!c){ return; } const g=c.getContext('2d'), z=this.z, W=c.width, H=c.height; let prev=performance.now();
+   const draw=()=>{ if(!$('#zlScr')) return; const now=performance.now(), dt=Math.min(.1,(now-prev)/1000); prev=now; z.t+=dt;
+     if(z.charging&&now>=z.charging){ z.charging=0; z.charged=true; this.L(`${z.e} J พร้อม (READY)`); beep(1400,.5,.04); this.syncUI(); }
+     if(z.cpr&&z.cprAfterShock===false&&now-z.lastShock<6000) z.cprAfterShock=true;
+     if(z.wipe){ z.wipe=false; g.fillStyle='#000'; g.fillRect(0,0,W,H); z.x=0; z.last=null; }
+     const off=z.mode==='OFF'; g.fillStyle='#000'; if(off){ g.fillRect(0,0,W,H); g.fillStyle='#222'; g.font='600 20px IBM Plex Mono'; g.fillText('ZOLL',W/2-30,H/2); this.raf=requestAnimationFrame(draw); return; }
+     // header
+     g.fillRect(0,0,W,46); g.fillStyle='#0b1a20'; g.fillRect(0,0,W,46); g.font='700 20px IBM Plex Mono'; g.textAlign='left';
+     g.fillStyle={MONITOR:'#9fe7ff',DEFIB:'#ffb020',PACER:'#ff7ad9',AED:'#ff5a5a'}[z.mode]; g.fillText(z.mode==='DEFIB'?'MANUAL':z.mode,12,30);
+     if(z.sync){ g.fillStyle='#ffe14d'; g.fillText('SYNC',130,30); }
+     g.fillStyle='#ccc'; g.font='16px IBM Plex Mono'; g.fillText(new Date().toTimeString().slice(0,8),W-110,28);
+     // signal availability
+     const src=z.lead==='PADS'?z.pads:z.leads; const v0=src&&!(z.cpr);
+     // trace area — sweep speed follows real time (25 mm/s feel), so slow PCs draw the same waveform
+     const top=56, h=210, mid=top+h*.55, PX=125, step=2, TW=W-200;
+     if(z.tx==null) z.tx=z.t; let n=Math.min(600,Math.floor((z.t-z.tx)*PX/step));
+     for(let i=0;i<n;i++){ z.tx+=step/PX; const tt=z.tx; g.fillStyle='#000'; g.fillRect(z.x+1,top,step+14,h);
+       const yv=src?(z.cpr?Math.sin(tt*11)*.6+.15*Math.sin(tt*3):this.rhythmVal(tt)):0; const y=mid-yv*70;
+       if(z.last!=null&&z.x>0){ g.strokeStyle='#3cff6a'; g.lineWidth=2.2; g.beginPath(); g.moveTo(z.x-step,z.last); g.lineTo(z.x,y); g.stroke(); }
+       if(z.sync&&src&&!z.cpr&&yv>.85&&!(z.mark>tt-.2)){ z.mark=tt; g.fillStyle='#ffe14d'; g.beginPath(); g.moveTo(z.x,top+16); g.lineTo(z.x-6,top+4); g.lineTo(z.x+6,top+4); g.fill(); }
+       z.last=y; z.x+=step; if(z.x>TW){ z.x=0; z.last=null; } }
+     // right column numbers
+     g.fillStyle='#000'; g.fillRect(W-196,46,196,H-46); g.textAlign='right';
+     const hr=!src?'---':z.rh==='vf'||z.rh==='asys'?'---':z.captured?z.rate:(ZRH[z.rh]||{}).rate;
+     g.fillStyle='#3cff6a'; g.font='600 16px IBM Plex Mono'; g.fillText('HR',W-150,78); g.font='700 56px IBM Plex Mono'; g.fillText(hr,W-14,124);
+     g.font='600 15px IBM Plex Mono'; g.fillStyle='#9fe7ff'; g.fillText('LEAD '+z.lead+(src?'':' OFF'),W-14,152);
+     if(z.mode==='DEFIB'||z.mode==='AED'){ g.fillStyle='#ffb020'; g.font='600 15px IBM Plex Mono'; g.fillText(z.charging?'CHARGING…':z.charged?'READY':'SEL ENERGY',W-14,186); g.font='700 40px IBM Plex Mono'; g.fillText((z.mode==='AED'&&z.aed&&z.aed.e?z.aed.e:z.e)+' J',W-14,228); }
+     if(z.mode==='PACER'){ g.fillStyle='#ff7ad9'; g.font='600 15px IBM Plex Mono'; g.fillText('PACER',W-14,186); g.font='700 26px IBM Plex Mono'; g.fillText(z.rate+' PPM',W-14,216); g.fillText(z.ma+' mA',W-14,246); }
+     g.textAlign='left';
+     // CPR dashboard
+     g.fillStyle='#000'; g.fillRect(0,top+h,W-196,H-top-h);
+     if(z.cpr){ const ph=(z.t*110/60)%1, depth=5+.6*Math.sin(ph*Math.PI); g.fillStyle='#9fe7ff'; g.font='600 14px IBM Plex Mono'; g.fillText('Real CPR Help',12,top+h+22);
+       g.fillStyle='#123'; g.fillRect(12,top+h+30,240,18); g.fillStyle='#3cff6a'; g.fillRect(12,top+h+30,240*Math.min(1,depth/6.5),18); g.fillStyle='#fff'; g.fillText('DEPTH '+depth.toFixed(1)+' cm',262,top+h+44);
+       g.fillStyle='#123'; g.fillRect(12,top+h+54,240,18); g.fillStyle='#3cff6a'; g.fillRect(12,top+h+54,240*110/130,18); g.fillStyle='#fff'; g.fillText('RATE 110 /min',262,top+h+68); }
+     // message line
+     g.fillStyle='#000'; g.fillRect(0,H-40,W,40); if(!src&&!(z.msg&&now<z.msgT)){ g.fillStyle='#ff5a5a'; g.font='700 18px IBM Plex Mono'; g.fillText(z.lead==='PADS'?'PADS OFF · ติด pads ก่อน':'LEADS OFF · ติด ECG leads',14,H-14); }
+     if(z.msg&&now<z.msgT){ g.fillStyle=/⚠|SHOCK|ANALYZ|PADS|หยุด|ห้าม/.test(z.msg)&&Math.sin(now/120)>0?'#ff5a5a':'#ffe14d'; g.font='700 18px IBM Plex Sans Thai, IBM Plex Mono'; g.fillText(z.msg,14,H-14); }
+     if(z.flash&&now-z.flash<250){ g.fillStyle='rgba(255,255,255,.6)'; g.fillRect(0,0,W,H); }
+     this.raf=requestAnimationFrame(draw); };
+   this.raf=requestAnimationFrame(draw); },
+ // grading per task → {score 0..1, items:[[label,ok]], text}
+ grade(){ const z=this.z, t=this.o.task, I=[]; const add=(l,ok)=>I.push([l,!!ok]);
+   if(t==='manual'){ add('ติด pads',z.log.some(l=>/ติด pads/.test(l[1]))); add('โหมด MANUAL DEFIB (ไม่เปิด SYNC ใน VF)',z.shocks>0&&!z.syncStuck);
+     add('พลังงาน biphasic ≥ 120 J (120–150–200 J)',z.log.some(l=>/SHOCK (1[2-9]\d|200) J/.test(l[1]))); add('ประกาศให้ทุกคนถอยออกก่อน shock',z.shocks>0&&z.clearBeforeShock);
+     add('ไม่ shock ขณะยังกดหน้าอก',z.shocks>0&&!z.shockDuringCpr); add('กดหน้าอกต่อทันทีหลัง shock',z.cprAfterShock===true); add('Charge ระหว่างกดหน้าอก (ลดช่วงหยุด CPR)',z.chargeDuringCpr); add('กลับเป็นจังหวะที่มีชีพจร และตรวจชีพจร',z.rh!=='vf'&&z.rh!=='vt'&&z.pulseChecked); }
+   else if(t==='aed'){ add('ติด pads',z.log.some(l=>/ติด pads/.test(l[1]))); add('หยุด CPR ขณะวิเคราะห์',z.log.some(l=>/AED วิเคราะห์/.test(l[1]))&&!z.cprDuringAnalyze); add('ประกาศถอยออกก่อน shock',z.shocks>0&&z.clearBeforeShock); add('กด SHOCK เมื่อเครื่องแนะนำ',z.shocks>0); add('เริ่ม CPR ทันทีหลัง shock',z.cprAfterShock===true); }
+   else if(t==='sync'){ add('ติด pads และ ECG leads',z.log.some(l=>/ติด pads/.test(l[1]))&&z.log.some(l=>/ECG 3 leads/.test(l[1]))); add('เปิด SYNC (เห็นเครื่องหมายเหนือ R wave)',z.syncFired>0); add('เลือกพลังงาน 50–120 J สำหรับ SVT',z.log.some(l=>/SHOCK ([5-9]\d|1[01]\d|120) J \(synchronized\)/.test(l[1])));
+     add('ประกาศถอยออกก่อน shock',z.shocks>0&&z.clearBeforeShock); add('ไม่ shock แบบไม่ sync (ไม่เกิด VF)',!z.rOnT); add('กลับเป็น sinus และตรวจชีพจร',z.converted&&z.pulseChecked); }
+   else if(t==='pace'){ add('ติด pads (anterior–posterior) และ ECG leads',z.log.some(l=>/ติด pads/.test(l[1]))&&z.log.some(l=>/ECG 3 leads/.test(l[1]))); add('โหมด PACER',z.log.some(l=>/โหมด PACER/.test(l[1])));
+     add('ตั้ง rate 60–80 ppm',z.rate>=60&&z.rate<=80); add('เพิ่ม output จนเกิด electrical capture',z.captured); add('ไม่ตั้ง output สูงเกินจำเป็น (≤ threshold + 20 mA)',z.ma<=z.capThr+20); add('ตรวจชีพจร (mechanical capture)',z.pulseChecked&&z.captured); }
+   const sc=I.length?I.filter(i=>i[1]).length/I.length:1; return {task:t,score:sc,items:I,log:z.log}; }
+};
+{ const st=document.createElement('style'); st.textContent=`
+#zoll{position:fixed;inset:0;z-index:150;display:grid;place-items:center;background:rgba(3,8,16,.82);padding:10px;overflow:auto}
+.zl-card{width:min(1280px,98vw);padding:14px;display:grid;gap:10px}.zl-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.zl-brief{font-size:13.5px;padding:8px 12px;border-radius:10px;background:rgba(245,190,70,.08);border:1px solid rgba(245,190,70,.35)}
+.zl-wrap{display:grid;grid-template-columns:minmax(0,1fr) 200px 240px;gap:12px}
+.zl-dev{background:linear-gradient(#3a3f45,#2a2e33);border-radius:18px;padding:12px;border:1px solid #555;display:grid;gap:8px}
+.zl-brand{font-family:var(--f-display);font-weight:700;color:#e9eef2;letter-spacing:.08em}.zl-brand span{font-weight:500;color:#aab;font-size:13px}
+.zl-screenbox{background:#000;border-radius:8px;padding:6px;border:3px solid #15181b}.zl-screenbox canvas{width:100%;height:auto;display:block}
+.zl-soft,.zl-attach{display:flex;flex-wrap:wrap;gap:6px}.zl-soft button,.zl-attach button,.zl-knob button,.zl-grp button{padding:7px 10px;border-radius:8px;border:1px solid #666;background:#1f2328;color:#e9eef2;font-size:12.5px;font-family:var(--f-mono)}
+.zl-attach button{font-family:inherit}.zl-soft button.on,.zl-attach button.on,.zl-knob button.on{background:#2ec4b6;color:#03201d;border-color:#2ec4b6}.zl-attach .zclr.on{background:#ffb020;border-color:#ffb020;color:#2a1d00}
+.zl-soft .zsy.on{background:#ffe14d;color:#2a2400;border-color:#ffe14d}
+.zl-ctrl{display:grid;gap:8px;align-content:start;background:#2a2e33;border-radius:14px;padding:10px;border:1px solid #555}
+.zl-knob{display:grid;gap:4px}.zl-grp{display:grid;gap:4px}.zl-grp .flex{justify-content:space-between}.zl-grp b{font-family:var(--f-mono);font-size:18px;color:#fff}
+.zl-big{padding:12px;border-radius:12px;font-weight:700;font-size:15px;border:0}.zl-charge{background:#f5c542;color:#2a1d00}.zl-shock{background:#c0392b;color:#fff;opacity:.7}.zl-shock.ready{opacity:1;animation:zlb .6s infinite alternate;box-shadow:0 0 18px #ff5a5a}
+@keyframes zlb{to{background:#ff4d3d}}
+.zl-side{display:grid;align-content:start}.zl-log{font-size:12.5px;display:grid;gap:4px;max-height:420px;overflow:auto;padding:8px;border-radius:10px;background:#0b1a2e;border:1px solid var(--line)}
+@media (max-width:980px){ .zl-wrap{grid-template-columns:1fr} }`; document.head.appendChild(st); }
+/* ================================================================
+   EXPERT REVIEW MODE — content validity (CVI) + usability (SUS) by experts
+   Entry: title-screen button or URL ?expert . Per-case rating after each case result,
+   overall form (15 CVI items · 10 SUS items · recommendation · open comments).
+   Storage: sheet → Apps Script actions 'expert' / 'expertCase' (sheets Experts, ExpertCases, ExpertStats)
+            db    → fields expert / expertCases in feedback/<viewer id>
+            local → localStorage + CSV from the dashboard
+   Statistics: I-CVI, modified kappa, S-CVI/Ave, S-CVI/UA, mean/SD/median, SUS, per-case.
+   ================================================================ */
+const EXP_CVI=[
+ ['A1','การเลือกเครื่องมือ EWS ตามอายุและภาวะ (MEWS · PEWS · NEWS · MEOWS)'],
+ ['A2','เกณฑ์การให้คะแนนพารามิเตอร์แต่ละตัวถูกต้องตามนโยบาย'],
+ ['A3','ระดับความรุนแรงและแนวทางปฏิบัติตามช่วงคะแนน'],
+ ['A4','เกณฑ์การเรียกทีม ERT 3458 และ critical criteria'],
+ ['A5','การวิเคราะห์ปัญหาผู้ป่วย (clinical reasoning) และตัวเลือก'],
+ ['A6','การช่วยเหลือผู้ป่วยทันทีก่อนแจ้งทีม และการประเมินซ้ำ'],
+ ['A7','การสื่อสาร: ประกาศ ERT และรายงานแพทย์ (SBAR)'],
+ ['A8','การส่งต่อข้อมูลให้ทีม ERT (handover)'],
+ ['A9','กิจกรรมการพยาบาลและอุปกรณ์ (O₂ device, suction, IV, DTX, position ฯลฯ)'],
+ ['A10','Emergency cart: ยาและอุปกรณ์ในแต่ละลิ้นชัก'],
+ ['A11','ZOLL R Series: Manual defib · AED · Sync cardioversion · Pacing'],
+ ['A12','การช่วยแพทย์ใส่ท่อช่วยหายใจ: อุปกรณ์และลำดับขั้นตอน'],
+ ['A13','ความสมจริงของอาการผู้ป่วยและการเปลี่ยนแปลงของสัญญาณชีพ'],
+ ['A14','ระบบคะแนนและเฉลยสะท้อนสมรรถนะที่ต้องการวัด'],
+ ['A15','ความเหมาะสมของระดับความยาก (Level 1–4) กับกลุ่มผู้เรียน']];
+const EXP_SUS=['ฉันคิดว่าอยากใช้เกมนี้บ่อย ๆ','ฉันพบว่าเกมนี้ซับซ้อนเกินความจำเป็น','ฉันคิดว่าเกมนี้ใช้งานง่าย','ฉันคิดว่าต้องมีผู้ช่วยด้านเทคนิคจึงจะใช้เกมนี้ได้',
+ 'ฉันพบว่าส่วนต่าง ๆ ของเกมเชื่อมโยงกันได้ดี','ฉันคิดว่าเกมนี้มีความไม่สอดคล้องกันมากเกินไป','ฉันคิดว่าคนส่วนใหญ่จะเรียนรู้การใช้เกมนี้ได้อย่างรวดเร็ว','ฉันพบว่าเกมนี้ใช้งานยุ่งยาก',
+ 'ฉันมั่นใจเมื่อใช้เกมนี้','ฉันต้องเรียนรู้หลายอย่างก่อนจะเริ่มใช้เกมนี้ได้'];
+const EXP_CASE=[['c1','ข้อมูลผู้ป่วยและสัญญาณชีพถูกต้องทางคลินิก'],['c2','คะแนน EWS และการตัดสินใจตาม ERT ถูกต้องตามนโยบาย'],['c3','การพยาบาลและเฉลยเหมาะสม'],['c4','สถานการณ์สมจริง']];
+const EXP_L4=['ไม่สอดคล้อง / ไม่ถูกต้อง','ต้องปรับปรุงมาก','ปรับปรุงเล็กน้อย','สอดคล้อง / ถูกต้องมาก'];
+const EXP_L5=['ไม่เห็นด้วยอย่างยิ่ง','ไม่เห็นด้วย','เฉย ๆ','เห็นด้วย','เห็นด้วยอย่างยิ่ง'];
+const EXP_REC=[['go','ใช้ได้ทันที'],['minor','ใช้ได้หลังปรับแก้เล็กน้อย'],['major','ต้องปรับแก้มากก่อนใช้'],['no','ยังไม่ควรนำไปใช้']];
+const EXP_PROF=['แพทย์','พยาบาลวิชาชีพ (หอผู้ป่วย/ICU)','หัวหน้าหอผู้ป่วย / ผู้ตรวจการ','Clinical Nurse Educator / อาจารย์พยาบาล','ทีม ERT / Resuscitation','อื่น ๆ'];
+
+const EXP={
+  me:null,
+  on(){ return !!this.me; },
+  load(){ try{ this.me=JSON.parse(sessionStorage.getItem('ert.expertOn')||'null')&&LS.get('ert.expert',null); }catch(e){ this.me=null; } },
+  cases(){ return LS.get('ert.expert.cases',{}); },
+  form(){ return LS.get('ert.expert.form',null); }
+};
+
+/* ---------- statistics (shared by dashboard; Code.gs mirrors it) ---------- */
+const XS={
+  mean:a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null,
+  sd(a){ if(a.length<2) return null; const m=this.mean(a); return Math.sqrt(a.reduce((s,x)=>s+(x-m)*(x-m),0)/(a.length-1)); },
+  median(a){ if(!a.length) return null; const s=[...a].sort((x,y)=>x-y), h=s.length>>1; return s.length%2?s[h]:(s[h-1]+s[h])/2; },
+  comb(n,k){ let r=1; for(let i=1;i<=k;i++) r=r*(n-k+i)/i; return r; },
+  kappa(icvi,n){ if(!n) return null; const A=Math.round(icvi*n), pc=this.comb(n,A)*Math.pow(.5,n); return pc>=1?null:(icvi-pc)/(1-pc); },
+  kLab:k=>k==null?'—':k>.74?'ดีเยี่ยม':k>=.6?'ดี':k>=.4?'พอใช้':'ต่ำ',
+  icviCut:n=>n<=5?1:.78,
+  sus(r){ if(!r||r.length<10||r.some(x=>!x)) return null; return r.reduce((s,x,i)=>s+(i%2===0?x-1:5-x),0)*2.5; },
+  susLab:s=>s==null?'—':s>=85.5?'ดีเยี่ยม (Excellent)':s>=71.4?'ดี (Good)':s>=50.9?'พอใช้ (OK)':'ต้องปรับปรุง (Poor)',
+  run(forms,caseRows){
+    const N=forms.length, items=EXP_CVI.map(([k,t])=>{ const v=forms.map(f=>+f.cvi?.[k]).filter(x=>x>=1); const n=v.length, rel=v.filter(x=>x>=3).length, icvi=n?rel/n:null;
+      return {k,t,n,mean:this.mean(v),sd:this.sd(v),median:this.median(v),icvi,kappa:icvi==null?null:this.kappa(icvi,n),pass:icvi!=null&&icvi>=this.icviCut(n)}; });
+    const iv=items.filter(i=>i.icvi!=null);
+    const sus=forms.map(f=>this.sus(f.sus)).filter(x=>x!=null);
+    const rec={}; forms.forEach(f=>f.rec&&(rec[f.rec]=(rec[f.rec]||0)+1));
+    const ov=forms.map(f=>+f.overall).filter(x=>x>0);
+    const byCase={}; caseRows.forEach(r=>{ const o=byCase[r.caseId]||(byCase[r.caseId]={caseId:r.caseId,title:r.title,rows:[]}); o.rows.push(r); });
+    const cases=Object.values(byCase).map(o=>{ const per=EXP_CASE.map(([k])=>o.rows.map(r=>+r[k]).filter(x=>x>=1)); const all=per.flat();
+      return {caseId:o.caseId,title:o.title,n:o.rows.length,item:per.map(v=>this.mean(v)),mean:this.mean(all),sd:this.sd(all),cvi:all.length?all.filter(x=>x>=3).length/all.length:null,
+        low:o.rows.filter(r=>EXP_CASE.some(([k])=>+r[k]&&+r[k]<=2)).length,comments:o.rows.filter(r=>r.comment).map(r=>({who:r.name,prof:r.prof,t:r.comment}))}; })
+      .sort((a,b)=>(a.mean??9)-(b.mean??9));
+    const prof={}; forms.forEach(f=>prof[f.prof||'ไม่ระบุ']=(prof[f.prof||'ไม่ระบุ']||0)+1);
+    const yrs=forms.map(f=>+f.years).filter(x=>x>=0);
+    return {N,items,scviAve:iv.length?this.mean(iv.map(i=>i.icvi)):null,scviUA:iv.length?iv.filter(i=>i.icvi===1).length/iv.length:null,
+      sus:{n:sus.length,mean:this.mean(sus),sd:this.sd(sus),min:sus.length?Math.min(...sus):null,max:sus.length?Math.max(...sus):null},
+      overall:{n:ov.length,mean:this.mean(ov),sd:this.sd(ov)},rec,cases,prof,years:{mean:this.mean(yrs),sd:this.sd(yrs),n:yrs.length},caseRaters:new Set(caseRows.map(r=>r.expertId)).size};
+  }
+};
+const xq=(s,r)=>(r||document).querySelector(s), xqa=(s,r)=>[...(r||document).querySelectorAll(s)];
+const f2=(x,d=2)=>x==null||isNaN(x)?'—':(+x).toFixed(d);
+
+/* ---------- storage ---------- */
+async function expSave(kind,entry){
+  if(kind==='form') LS.set('ert.expert.form',entry); else { const c=EXP.cases(); c[entry.caseId]=entry; LS.set('ert.expert.cases',c); }
+  await Store.ready;
+  if(Store.mode==='sheet'){ await Sheet.queue({a:kind==='form'?'expert':'expertCase',qid:kind+':'+entry.expertId+(entry.caseId?':'+entry.caseId:''),entry}); return 'sheet'; }
+  if(Store.mode==='db'){ const ref=Store.db.doc('feedback/'+Store.uid); const snap=await ref.get(); const cur=snap.exists?snap.data():{entries:[]};
+    const nx=Object.assign({entries:[]},cur,{name:cur.name||entry.name,role:cur.role||entry.prof,updatedAt:entry.ts});
+    if(kind==='form') nx.expert=entry; else nx.expertCases=Object.assign({},cur.expertCases||{},{[entry.caseId]:entry});
+    await ref.set(nx); return 'db'; }
+  return 'local';
+}
+async function expLoadAll(){
+  const forms=new Map(), cases=new Map(); const put=(f)=>f&&f.expertId&&forms.set(f.expertId,f); const putc=r=>r&&r.expertId&&cases.set(r.expertId+'|'+r.caseId,r);
+  put(EXP.form()); Object.values(EXP.cases()).forEach(putc); await Store.ready;
+  if(Store.mode==='sheet'){ (Sheet.cache?.experts||[]).forEach(put); (Sheet.cache?.expertCases||[]).forEach(putc); }
+  if(Store.mode==='db'&&Store.canAll){ try{ const q=await Store.db.collection('feedback').limit(1000).get(); q.docs.forEach(d=>{ const x=d.data(); put(x.expert); Object.values(x.expertCases||{}).forEach(putc); }); }catch(e){ console.warn(e); } }
+  return {forms:[...forms.values()],cases:[...cases.values()]};
+}
+
+/* ---------- registration ---------- */
+function expRegister(then){
+  const me=LS.get('ert.expert',{})||{};
+  modal(`<div class="mhead"><div><div class="eyebrow">Expert review · ผู้ทรงคุณวุฒิ</div><h2 style="font-size:19px">ลงทะเบียนผู้เชี่ยวชาญประเมินเกม</h2></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>
+   <p class="muted" style="margin:0;font-size:13.5px">ขอบคุณที่ช่วยตรวจสอบความตรงเชิงเนื้อหาของเกม ERT 3458 · ทุกเคสเปิดให้เล่นได้ทันที หลังจบแต่ละเคสจะมีแบบประเมินเคสสั้น ๆ 4 ข้อ และมีแบบประเมินภาพรวม (15 ข้อ + ความสะดวกในการใช้งาน 10 ข้อ) ใช้เวลาประมาณ 10 นาที</p>
+   <label class="fld">ชื่อ-นามสกุล<input class="inp" id="exN" maxlength="60" value="${esc(me.name||GS.player.name||'')}"></label>
+   <div class="seg" style="grid-template-columns:1fr 1fr"><label class="fld">วิชาชีพ / บทบาท<select class="inp" id="exP">${EXP_PROF.map(p=>`<option ${me.prof===p?'selected':''}>${p}</option>`).join('')}</select></label>
+   <label class="fld">ความเชี่ยวชาญ / หน่วยงาน<input class="inp" id="exS" maxlength="60" value="${esc(me.spec||'')}" placeholder="เช่น ICU, อายุรศาสตร์, กุมารเวช"></label></div>
+   <div class="seg" style="grid-template-columns:1fr 1fr"><label class="fld">ประสบการณ์ในสาขา (ปี)<input class="inp" id="exY" type="number" min="0" max="50" value="${esc(me.years??'')}"></label>
+   <label class="fld">สถานที่ปฏิบัติงาน<input class="inp" id="exO" maxlength="60" value="${esc(me.org||'')}" placeholder="เช่น โรงพยาบาลกรุงเทพ สำนักงานใหญ่"></label></div>
+   <label class="flex" style="font-size:13px;gap:8px;align-items:flex-start"><input type="checkbox" id="exC" ${me.consent?'checked':''} style="margin-top:3px"> ยินยอมให้นำคะแนนและความคิดเห็นไปวิเคราะห์ทางสถิติเพื่อพัฒนาเกม โดยรายงานผลในภาพรวม ไม่ระบุชื่อ</label>
+   <div class="flex"><button class="btn primary right-al" id="exGo">เริ่มประเมิน →</button></div>`);
+  $('#exGo').onclick=()=>{ const name=$('#exN').value.trim(); if(!name){ toast('กรอกชื่อก่อน','bad'); return; } if(!$('#exC').checked){ toast('กรุณายืนยันความยินยอม','bad'); return; }
+    const same=me.expertId&&(me.name||'').trim()===name; if(!same){ try{ ['ert.expert.cases','ert.expert.form','ert.expert.draft'].forEach(k=>localStorage.removeItem(k)); }catch(z){} }
+    const e={expertId:same?me.expertId:('X'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)),name,prof:$('#exP').value,spec:$('#exS').value.trim(),years:$('#exY').value===''?'':+$('#exY').value,org:$('#exO').value.trim(),consent:true};
+    LS.set('ert.expert',e); try{ sessionStorage.setItem('ert.expertOn','1'); }catch(x){} EXP.me=e;
+    Object.assign(GS.player,{name,unit:e.spec||e.prof,role:'RN'}); LS.set('ert.player',GS.player); if(!GS.av) GS.av=defaultAv('RN','F');
+    closeModal(); try{ ac(); }catch(x){} expBar(); then?then():openLevels(); };
+}
+function expExit(){ try{ sessionStorage.removeItem('ert.expertOn'); }catch(e){} EXP.me=null; $('#expBar')?.remove(); document.body.classList.remove('expert'); show('scr-title'); }
+
+/* ---------- top bar chip ---------- */
+function expBar(){ document.body.classList.toggle('expert',EXP.on()); if(!EXP.on()){ $('#expBar')?.remove(); return; }
+  let b=$('#expBar'); if(!b){ b=document.createElement('button'); b.id='expBar'; b.className='exp-chip'; b.onclick=expPanel; $('#btnFb').before(b); }
+  const n=Object.keys(EXP.cases()).length, f=EXP.form(); b.innerHTML=`<b>EXPERT</b> ${n} เคส · ${f?'ประเมินภาพรวมแล้ว ✓':'ยังไม่ประเมินภาพรวม'}`; }
+function expPanel(){ const rated=EXP.cases(), f=EXP.form();
+  modal(`<div class="mhead"><div><div class="eyebrow">Expert review · ${esc(EXP.me.name)}</div><h2 style="font-size:19px">ความคืบหน้าการประเมิน</h2></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>
+   <div class="kpis"><div class="kpi"><b>${Object.keys(rated).length}/${CASES.length}</b><span>เคสที่ประเมินแล้ว</span></div><div class="kpi"><b>${f?'✓':'—'}</b><span>แบบประเมินภาพรวม</span></div></div>
+   <p class="muted" style="margin:0;font-size:13px">แนะนำให้เล่นอย่างน้อย 1 เคสต่อกลุ่มผู้ป่วย (ผู้ใหญ่ · เด็ก · ทารกแรกเกิด · หญิงตั้งครรภ์) และลอง Equipment lab ก่อนทำแบบประเมินภาพรวม · กดเลขเคสเพื่อเล่นทันที</p>
+   ${expCaseGrid()}
+   <div class="flex"><button class="btn ghost sm" id="exOut">ออกจากโหมดผู้เชี่ยวชาญ</button><button class="btn gold right-al" id="exForm">${f?'แก้ไข':'ทำ'}แบบประเมินภาพรวม →</button></div>`); $('#mbox').classList.add('wide');
+  wireCaseGrid(); $('#exForm').onclick=expForm; $('#exOut').onclick=()=>{ closeModal(); expExit(); }; }
+function expCaseGrid(){ const rated=EXP.cases(); const pop={adult:'ผู้ใหญ่',peds:'เด็ก',neo:'ทารกแรกเกิด',ob:'หญิงตั้งครรภ์'};
+  const groups={}; CASES.forEach(c=>{ const g=(typeof critPop==='function'?critPop(c.p):'adult'); (groups[g]=groups[g]||[]).push(c); });
+  return `<div class="exp-grid">${Object.entries(groups).map(([g,cs])=>`<div><div class="eyebrow" style="margin-bottom:4px">${pop[g]||g} · ${cs.filter(c=>rated[c.id]).length}/${cs.length}</div><div class="exp-cases">${cs.map(c=>`<button class="exp-case${rated[c.id]?' done':''}" data-xc="${c.id}" title="${esc(c.title)} · ระดับ ${c.lv} · ${c.tool}">${c.id}${rated[c.id]?' ✓':''}</button>`).join('')}</div></div>`).join('')}</div>`; }
+function wireCaseGrid(){ $$('[data-xc]').forEach(b=>b.onclick=()=>{ const c=CASES.find(x=>x.id===b.dataset.xc); closeModal(); startSession(Math.min(3,c.lv),[c.id]); }); }
+
+/* ---------- level screen card ---------- */
+{ const _ol=openLevels; openLevels=function(){ _ol(); expBar(); if(!EXP.on()) return; const host=$('#scr-level .lv-wrap')||$('#lvGrid')?.parentElement; if(!host) return;
+    const c=document.createElement('div'); c.id='expCard'; c.className='glass card'; host.prepend(c);
+    c.innerHTML=`<div class="flex"><div><div class="eyebrow" style="color:var(--gold)">Expert review mode</div><h3 style="font-size:18px;margin:2px 0">เลือกเคสที่ต้องการตรวจ (เปิดครบทุกเคส)</h3><div class="muted" style="font-size:13px">หลังจบเคสจะมีแบบประเมินเคส 4 ข้อ · ประเมินภาพรวมได้ทุกเมื่อจากปุ่ม EXPERT มุมขวาบน</div></div><button class="btn gold right-al" id="exForm2">แบบประเมินภาพรวม</button></div>${expCaseGrid()}`;
+    wireCaseGrid(); $('#exForm2').onclick=expForm; }; }
+
+/* ---------- likert widget ---------- */
+function likert(name,val,n,labels){ return `<div class="lk" role="radiogroup" data-lk="${name}">${Array.from({length:n},(_,i)=>`<button type="button" class="lk-b" data-v="${i+1}" aria-pressed="${+val===i+1}" title="${esc(labels[i])}">${i+1}</button>`).join('')}</div>`; }
+function wireLikert(root,store,onChange){ xqa('[data-lk]',root).forEach(g=>xqa('.lk-b',g).forEach(b=>b.onclick=()=>{ store[g.dataset.lk]=+b.dataset.v; xqa('.lk-b',g).forEach(x=>x.setAttribute('aria-pressed',x===b)); onChange&&onChange(g.dataset.lk); })); }
+
+/* ---------- per-case rating on the result screen ---------- */
+{ const _rr=rResult; rResult=function(){ _rr(); if(!EXP.on()) return; const cs=C.cs, prev=EXP.cases()[cs.id]||{}; const v={c1:prev.c1,c2:prev.c2,c3:prev.c3,c4:prev.c4};
+    const box=document.createElement('div'); box.className='exp-box'; box.id='expCaseBox';
+    box.innerHTML=`<div class="eyebrow" style="color:var(--gold)">ผู้เชี่ยวชาญ · ประเมินเคส ${esc(cs.id)}</div>
+      <div class="muted" style="font-size:12px">1 = ${EXP_L4[0]} · 2 = ${EXP_L4[1]} · 3 = ${EXP_L4[2]} · 4 = ${EXP_L4[3]}</div>
+      ${EXP_CASE.map(([k,t])=>`<div class="lk-row"><span>${t}</span>${likert(k,v[k],4,EXP_L4)}</div>`).join('')}
+      <textarea class="inp" id="exCm" rows="3" maxlength="1500" placeholder="ข้อเสนอแนะสำหรับเคสนี้ (ระบุสิ่งที่ควรแก้ เช่น ค่าสัญญาณชีพ เกณฑ์ การพยาบาล เฉลย)">${esc(prev.comment||'')}</textarea>
+      <div class="flex"><span class="muted" id="exCaseMsg" style="font-size:12px">${prev.ts?'ประเมินไว้แล้ว แก้ไขและบันทึกใหม่ได้':'ให้คะแนนครบ 4 ข้อแล้วกดบันทึก'}</span><button class="btn gold sm right-al" id="exCaseSave">บันทึกการประเมินเคส</button></div>`;
+    $('#cpBody').prepend(box); wireLikert(box,v);
+    $('#exCaseSave').onclick=async()=>{ if(EXP_CASE.some(([k])=>!v[k])){ toast('ให้คะแนนครบ 4 ข้อก่อน','bad'); return; }
+      const e=Object.assign({id:'XC'+Date.now().toString(36),ts:new Date().toISOString(),expertId:EXP.me.expertId,name:EXP.me.name,prof:EXP.me.prof,caseId:cs.id,title:cs.title,tool:cs.tool,level:cs.lv,score:C.rec?.score},v,{comment:$('#exCm').value.trim()});
+      $('#exCaseSave').disabled=true; try{ await expSave('case',e); $('#exCaseMsg').textContent='บันทึกแล้ว ✓'; toast('บันทึกการประเมินเคสแล้ว','ok'); }catch(x){ console.warn(x); toast('บันทึกในเครื่องแล้ว ส่งเข้าฐานข้อมูลไม่สำเร็จ','bad'); }
+      $('#exCaseSave').disabled=false; expBar(); };
+  }; }
+// expert sessions are tagged so learner statistics stay clean
+{ const _c=Store.compact; Store.compact=function(S){ const o=_c.call(this,S); if(EXP.on()){ o.utype='EXPERT'; o.expert=EXP.me.expertId; } return o; }; }
+{ const _f=flatRows; flatRows=function(){ return _f().filter(r=>!(r.session&&(r.session.utype==='EXPERT'||r.session.expert))); }; }
+// after a single-case session, return experts to the case list
+{ const _fs=finishSession; finishSession=function(){ _fs(); if(EXP.on()) expBar(); }; }
+
+/* ---------- overall form ---------- */
+function expForm(){
+  const prev=EXP.form()||LS.get('ert.expert.draft',null)||{}; const cvi=Object.assign({},prev.cvi||{}), sus={}; (prev.sus||[]).forEach((x,i)=>x&&(sus['s'+i]=x)); const note=Object.assign({},prev.note||{});
+  let overall=prev.overall||0, rec=prev.rec||'';
+  modal(`<div class="mhead"><div><div class="eyebrow">Expert review · ${esc(EXP.me.name)}</div><h2 style="font-size:19px">แบบประเมินภาพรวมเกม ERT 3458 Ward Sim</h2></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>
+   <div class="exp-sec"><h3>ส่วนที่ 1 · ความตรงเชิงเนื้อหา (Content validity)</h3><div class="muted" style="font-size:12.5px">ความสอดคล้องและถูกต้องของแต่ละองค์ประกอบกับนโยบาย W/P-02.1-BHQ-013 Rev.07 และแนวปฏิบัติทางคลินิก<br>1 = ${EXP_L4[0]} · 2 = ${EXP_L4[1]} · 3 = ${EXP_L4[2]} · 4 = ${EXP_L4[3]} · ให้ 1–2 กรุณาระบุสิ่งที่ควรแก้</div>
+    ${EXP_CVI.map(([k,t],i)=>`<div class="lk-row"><span><b class="mono" style="color:var(--gold)">${i+1}.</b> ${t}</span>${likert(k,cvi[k],4,EXP_L4)}<input class="inp exp-note" data-note="${k}" placeholder="สิ่งที่ควรแก้ไข" value="${esc(note[k]||'')}" ${cvi[k]&&cvi[k]<=2?'':'hidden'}></div>`).join('')}</div>
+   <div class="exp-sec"><h3>ส่วนที่ 2 · ความสะดวกในการใช้งาน (System Usability Scale)</h3><div class="muted" style="font-size:12.5px">1 = ${EXP_L5[0]} · 3 = ${EXP_L5[2]} · 5 = ${EXP_L5[4]}</div>
+    ${EXP_SUS.map((t,i)=>`<div class="lk-row"><span><b class="mono" style="color:var(--gold)">${i+1}.</b> ${t}</span>${likert('s'+i,sus['s'+i],5,EXP_L5)}</div>`).join('')}</div>
+   <div class="exp-sec"><h3>ส่วนที่ 3 · ความเห็นโดยรวม</h3>
+    <div class="lk-row"><span>คุณภาพโดยรวมของเกมเพื่อการเรียนรู้ (1 = ต้องปรับปรุงมาก · 5 = ดีมาก)</span>${likert('overall',overall,5,['ต้องปรับปรุงมาก','ต้องปรับปรุง','ปานกลาง','ดี','ดีมาก'])}</div>
+    <div class="fld">ข้อเสนอการนำไปใช้<div class="swatches">${EXP_REC.map(([k,l])=>`<button type="button" class="sw wide" data-rec="${k}" aria-pressed="${rec===k}">${l}</button>`).join('')}</div></div>
+    <label class="fld">จุดเด่นของเกม<textarea class="inp" id="exSt" rows="2" maxlength="1500">${esc(prev.strengths||'')}</textarea></label>
+    <label class="fld">สิ่งที่ควรปรับปรุง (เรียงตามความสำคัญ)<textarea class="inp" id="exIm" rows="3" maxlength="2000">${esc(prev.improve||'')}</textarea></label>
+    <label class="fld">ข้อเสนอแนะอื่น ๆ<textarea class="inp" id="exOt" rows="2" maxlength="1500">${esc(prev.other||'')}</textarea></label></div>
+   <div class="flex"><span class="muted" id="exLeft" style="font-size:12.5px"></span><button class="btn gold right-al" id="exSend">ส่งแบบประเมิน</button></div>`); $('#mbox').classList.add('wide');
+  const box=$('#mbox'), st={}; Object.assign(st,cvi,sus,{overall});
+  const left=()=>{ const m=EXP_CVI.filter(([k])=>!st[k]).length+EXP_SUS.filter((_,i)=>!st['s'+i]).length+(st.overall?0:1)+(rec?0:1); $('#exLeft').textContent=m?`เหลืออีก ${m} ข้อ`:'ครบทุกข้อแล้ว'; return m; };
+  const draft=()=>LS.set('ert.expert.draft',collect());
+  const collect=()=>({cvi:Object.fromEntries(EXP_CVI.map(([k])=>[k,st[k]||null])),sus:EXP_SUS.map((_,i)=>st['s'+i]||null),overall:st.overall||null,rec,
+    note:Object.fromEntries(xqa('.exp-note',box).map(i=>[i.dataset.note,i.value.trim()]).filter(x=>x[1])),strengths:$('#exSt').value.trim(),improve:$('#exIm').value.trim(),other:$('#exOt').value.trim()});
+  wireLikert(box,st,k=>{ const n=xq(`.exp-note[data-note="${k}"]`,box); if(n) n.hidden=!(st[k]<=2); left(); draft(); });
+  xqa('[data-rec]',box).forEach(b=>b.onclick=()=>{ rec=b.dataset.rec; xqa('[data-rec]',box).forEach(x=>x.setAttribute('aria-pressed',x===b)); left(); draft(); });
+  xqa('textarea,.exp-note',box).forEach(t=>t.oninput=draft); left();
+  $('#exSend').onclick=async()=>{ const m=left(); if(m){ toast(`ยังเหลือ ${m} ข้อ`,'bad'); const first=xqa('[data-lk]',box).find(g=>!st[g.dataset.lk]); first&&first.scrollIntoView({block:'center',behavior:'smooth'}); return; }
+    const d=collect(); const e=Object.assign({id:'XF'+Date.now().toString(36),ts:new Date().toISOString()},EXP.me,d,{susScore:XS.sus(d.sus),nCases:Object.keys(EXP.cases()).length});
+    $('#exSend').disabled=true; try{ const where=await expSave('form',e); try{ localStorage.removeItem('ert.expert.draft'); }catch(z){}; closeModal(); expBar();
+      modal(`<div class="mhead"><div><div class="eyebrow">ขอบคุณครับ</div><h2 style="font-size:19px">ส่งแบบประเมินเรียบร้อย</h2></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>
+        <p style="margin:0">คะแนนความสะดวกในการใช้งาน (SUS) ของคุณ <b class="mono">${f2(e.susScore,1)}</b> · ${XS.susLab(e.susScore)}</p>
+        <p class="muted" style="margin:0;font-size:13px">${where==='local'?'บันทึกไว้ในเครื่องนี้ · ผู้ดูแลดาวน์โหลดได้จาก Dashboard':'ส่งเข้าฐานข้อมูลของผู้พัฒนาแล้ว'} · กลับมาแก้ไขได้จากปุ่ม EXPERT มุมขวาบน</p>`); }
+    catch(x){ console.warn(x); toast('บันทึกในเครื่องแล้ว ส่งเข้าฐานข้อมูลไม่สำเร็จ','bad'); $('#exSend').disabled=false; } };
+}
+
+/* ---------- dashboard: expert statistics ---------- */
+{ const _rd=renderDash; renderDash=function(){ _rd(); if(canManage()) expDashCard(); }; }
+async function expDashCard(){ const host=$('#fbCard')||$('#orgCard')||$('#dashBody').firstElementChild; if(!host||$('#expDash')) return;
+  const card=document.createElement('div'); card.className='glass card'; card.id='expDash'; host.after(card); card.innerHTML='<h3 style="font-size:16px">ผลการประเมินโดยผู้เชี่ยวชาญ</h3><p class="muted">กำลังโหลด…</p>';
+  const {forms,cases}=await expLoadAll(); const R=XS.run(forms,cases);
+  const col=x=>x==null?'':x>=.78?'var(--ok)':x>=.5?'var(--gold)':'var(--red)';
+  card.innerHTML=`<div class="flex"><div><div class="eyebrow">Expert review · Content validity & usability</div><h3 style="font-size:16px;margin:2px 0">ผลการประเมินโดยผู้เชี่ยวชาญ</h3></div>
+     <div class="right-al flex"><button class="btn sm" id="exCsv1" ${forms.length?'':'disabled'}>CSV รายผู้เชี่ยวชาญ</button><button class="btn sm" id="exCsv2" ${cases.length?'':'disabled'}>CSV รายเคส</button><button class="btn sm" id="exCsv3" ${forms.length?'':'disabled'}>CSV สถิติ</button><button class="btn sm gold" id="exLink">ลิงก์เชิญผู้เชี่ยวชาญ</button></div></div>
+   ${!forms.length&&!cases.length?'<p class="muted" style="margin:0">ยังไม่มีข้อมูล · ส่งลิงก์เชิญ (ปุ่มด้านบน) ให้ผู้เชี่ยวชาญ ระบบจะเปิดโหมดผู้เชี่ยวชาญให้อัตโนมัติ</p>':`
+   <div class="kpis">
+     <div class="kpi"><b>${R.N}</b><span>ผู้เชี่ยวชาญส่งแบบภาพรวม${R.years.n?` · ประสบการณ์ ${f2(R.years.mean,1)} ± ${f2(R.years.sd,1)} ปี`:''}</span></div>
+     <div class="kpi"><b style="color:${col(R.scviAve>=.9?1:R.scviAve)}">${f2(R.scviAve)}</b><span>S-CVI/Ave (เกณฑ์ ≥ 0.90)</span></div>
+     <div class="kpi"><b>${f2(R.scviUA)}</b><span>S-CVI/UA (เกณฑ์ ≥ 0.80)</span></div>
+     <div class="kpi"><b>${f2(R.sus.mean,1)}</b><span>SUS ${R.sus.n?`± ${f2(R.sus.sd,1)} · ${XS.susLab(R.sus.mean)}`:''}</span></div>
+     <div class="kpi"><b>${f2(R.overall.mean,2)}</b><span>คุณภาพโดยรวม /5 ${R.overall.n>1?'± '+f2(R.overall.sd,2):''}</span></div>
+     <div class="kpi"><b>${cases.length}</b><span>การประเมินรายเคส · ${R.caseRaters} คน · ${R.cases.length} เคส</span></div></div>
+   <div class="muted" style="font-size:12px">ผู้เชี่ยวชาญ: ${Object.entries(R.prof).map(([k,n])=>`${esc(k)} ${n}`).join(' · ')||'—'} · ข้อเสนอการนำไปใช้: ${EXP_REC.filter(([k])=>R.rec[k]).map(([k,l])=>`${l} ${R.rec[k]}`).join(' · ')||'—'}</div>
+   ${R.N?`<div class="tbl-wrap"><table class="tbl exp-tbl"><thead><tr><th>ข้อ</th><th>องค์ประกอบ</th><th>n</th><th>Mean</th><th>SD</th><th>Mdn</th><th>I-CVI</th><th>k*</th><th>ผล</th></tr></thead><tbody>
+     ${R.items.map((i,x)=>`<tr><td class="mono">${x+1}</td><td>${esc(i.t)}</td><td class="mono">${i.n}</td><td class="mono">${f2(i.mean)}</td><td class="mono">${f2(i.sd)}</td><td class="mono">${f2(i.median,1)}</td><td class="mono" style="color:${col(i.icvi)}">${f2(i.icvi)}</td><td class="mono">${f2(i.kappa)}</td><td>${i.icvi==null?'—':i.pass?'<span style="color:var(--ok)">ผ่าน</span>':'<span style="color:var(--red)">ควรปรับ</span>'} <span class="muted" style="font-size:11.5px">${XS.kLab(i.kappa)}</span></td></tr>`).join('')}</tbody></table></div>
+     <div class="muted" style="font-size:11.5px">I-CVI = สัดส่วนผู้เชี่ยวชาญที่ให้ 3–4 · เกณฑ์ผ่าน ${R.N<=5?'1.00 เมื่อมีผู้เชี่ยวชาญ 3–5 คน (Lynn, 1986)':'≥ 0.78 เมื่อมีผู้เชี่ยวชาญ ≥ 6 คน (Polit & Beck, 2006)'} · k* = modified kappa ปรับโอกาสตกลงกันโดยบังเอิญ (> 0.74 ดีเยี่ยม · 0.60–0.74 ดี · 0.40–0.59 พอใช้)</div>`:''}
+   ${R.cases.length?`<h3 style="font-size:15px;margin:8px 0 4px">รายเคส (เรียงจากคะแนนต่ำสุด)</h3><div class="tbl-wrap"><table class="tbl exp-tbl"><thead><tr><th>เคส</th><th>n</th>${EXP_CASE.map(([k,t])=>`<th title="${esc(t)}">${k.toUpperCase()}</th>`).join('')}<th>Mean</th><th>CVI</th><th>ข้อเสนอแนะ</th></tr></thead><tbody>
+     ${R.cases.map(c=>`<tr><td><b class="mono">${esc(c.caseId)}</b><br><span class="muted" style="font-size:11.5px">${esc(c.title||'')}</span></td><td class="mono">${c.n}</td>${c.item.map(x=>`<td class="mono">${f2(x,1)}</td>`).join('')}<td class="mono">${f2(c.mean)}</td><td class="mono" style="color:${col(c.cvi)}">${f2(c.cvi)}</td><td style="font-size:12.5px">${c.comments.map(m=>`<div>• ${esc(m.t)} <span class="muted">— ${esc(m.who||'')}</span></div>`).join('')||'<span class="muted">—</span>'}</td></tr>`).join('')}</tbody></table></div>
+     <div class="muted" style="font-size:11.5px">${EXP_CASE.map(([k,t])=>`${k.toUpperCase()} ${t}`).join(' · ')}</div>`:''}
+   ${forms.length?`<h3 style="font-size:15px;margin:8px 0 4px">ความคิดเห็นปลายเปิด</h3><div style="display:grid;gap:8px;max-height:420px;overflow:auto">${forms.map(f=>`<div class="fb-row"><div class="flex" style="font-size:12.5px"><b>${esc(f.name)}</b><span class="muted">${esc(f.prof||'')}${f.spec?' · '+esc(f.spec):''}</span><span class="right-al mono" style="color:var(--gold)">SUS ${f2(f.susScore,1)}</span></div>
+     ${f.strengths?`<div style="font-size:13px"><b style="color:var(--teal)">จุดเด่น</b> ${esc(f.strengths)}</div>`:''}${f.improve?`<div style="font-size:13px;white-space:pre-wrap"><b style="color:var(--gold)">ควรปรับปรุง</b> ${esc(f.improve)}</div>`:''}
+     ${Object.entries(f.note||{}).map(([k,t])=>`<div style="font-size:12.5px"><span class="mono" style="color:var(--red)">${k}</span> ${esc(t)}</div>`).join('')}${f.other?`<div style="font-size:13px" class="muted">${esc(f.other)}</div>`:''}</div>`).join('')}</div>`:''}`}`;
+  const q=v=>`"${String(v??'').replace(/"/g,'""')}"`, day=new Date().toISOString().slice(0,10), csv=(rows)=>'﻿'+rows.map(r=>r.map(q).join(',')).join('\n');
+  $('#exCsv1')&&($('#exCsv1').onclick=()=>offerFile(`ERT3458_expert_forms_${day}.csv`,csv([['expertId','time','name','profession','specialty','org','years',...EXP_CVI.map(x=>x[0]),...EXP_SUS.map((_,i)=>'SUS'+(i+1)),'SUS_score','overall','recommend','n_cases','strengths','improve','other','item_notes'],
+    ...forms.map(f=>[f.expertId,f.ts,f.name,f.prof,f.spec,f.org,f.years,...EXP_CVI.map(([k])=>f.cvi?.[k]),...(f.sus||[]),f.susScore,f.overall,(EXP_REC.find(r=>r[0]===f.rec)||['',''])[1],f.nCases,f.strengths,f.improve,f.other,Object.entries(f.note||{}).map(([k,t])=>k+': '+t).join(' | ')])]),'text/csv'));
+  $('#exCsv2')&&($('#exCsv2').onclick=()=>offerFile(`ERT3458_expert_cases_${day}.csv`,csv([['expertId','time','name','profession','caseId','title','tool','level','game_score',...EXP_CASE.map(x=>x[0]),'mean','comment'],
+    ...cases.map(r=>[r.expertId,r.ts,r.name,r.prof,r.caseId,r.title,r.tool,r.level,r.score,...EXP_CASE.map(([k])=>r[k]),f2(XS.mean(EXP_CASE.map(([k])=>+r[k]).filter(Boolean))),r.comment])]),'text/csv'));
+  $('#exCsv3')&&($('#exCsv3').onclick=()=>offerFile(`ERT3458_expert_stats_${day}.csv`,csv([['section','item','description','n','mean','sd','median','I-CVI','modified_kappa','result'],
+    ...R.items.map(i=>['CVI',i.k,i.t,i.n,f2(i.mean),f2(i.sd),f2(i.median,1),f2(i.icvi),f2(i.kappa),i.icvi==null?'':i.pass?'pass':'revise']),
+    ['CVI','S-CVI/Ave','',R.N,'','','',f2(R.scviAve),'',''],['CVI','S-CVI/UA','',R.N,'','','',f2(R.scviUA),'',''],
+    ['SUS','SUS score','System Usability Scale 0-100',R.sus.n,f2(R.sus.mean,1),f2(R.sus.sd,1),'','','',XS.susLab(R.sus.mean)],
+    ['Overall','overall','คุณภาพโดยรวม 1-5',R.overall.n,f2(R.overall.mean),f2(R.overall.sd),'','','',''],
+    ...R.cases.map(c=>['Case',c.caseId,c.title,c.n,f2(c.mean),f2(c.sd),'',f2(c.cvi),'',''])]),'text/csv'));
+  $('#exLink').onclick=()=>{ const u=location.href.split('#')[0].split('?')[0]+'?expert=1';
+    modal(`<div class="mhead"><div><div class="eyebrow">เชิญผู้เชี่ยวชาญ</div><h2 style="font-size:19px">ลิงก์สำหรับผู้เชี่ยวชาญ</h2></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>
+      <p class="muted" style="margin:0;font-size:13px">เปิดลิงก์นี้แล้วระบบจะเข้าสู่โหมดผู้เชี่ยวชาญให้อัตโนมัติ (ทุกเคสเปิด · มีแบบประเมินเคสและภาพรวม) ${Store.mode==='db'?'· ใน claude.ai ให้แชร์ artifact ให้ผู้เชี่ยวชาญก่อน แล้วให้กดปุ่ม “สำหรับผู้เชี่ยวชาญ” ในหน้าแรก':''}</p>
+      <input class="inp mono" id="exU" readonly value="${esc(u)}"><div class="flex"><button class="btn primary right-al" id="exCp">คัดลอกลิงก์</button></div>`);
+    $('#exCp').onclick=()=>{ $('#exU').select(); try{ navigator.clipboard.writeText(u); }catch(e){ document.execCommand('copy'); } toast('คัดลอกแล้ว','ok'); }; };
+}
+
+/* ---------- entry points ---------- */
+{ const f=$('#loginForm'); if(f){ const b=document.createElement('button'); b.type='button'; b.className='btn gold sm'; b.id='btnExpert'; b.innerHTML='🎓 สำหรับผู้เชี่ยวชาญ · ประเมินเกม (Expert review)'; f.appendChild(b);
+  b.onclick=()=>{ EXP.load(); if(EXP.on()){ expBar(); openLevels(); } else expRegister(); }; } }
+EXP.load(); setTimeout(()=>{ expBar(); if(/[?&#]expert\b/.test(location.search+location.hash)&&!EXP.on()) expRegister(); },300);
+
+(()=>{ const st=document.createElement('style'); st.textContent=`
+ .exp-chip{font:600 12.5px var(--f-sans,inherit);color:var(--gold);background:rgba(217,180,90,.1);border:1px solid var(--gold);border-radius:999px;padding:6px 12px;cursor:pointer;white-space:nowrap}
+ .exp-chip b{font-family:var(--f-mono);letter-spacing:.08em;margin-right:4px}
+ @media(max-width:640px){.exp-chip{font-size:11px;padding:5px 8px}}
+ .exp-box{display:grid;gap:8px;padding:12px;border-radius:12px;border:1px solid var(--gold);background:rgba(217,180,90,.07);margin-bottom:10px}
+ .lk-row{display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:13.5px}
+ .lk-row .exp-note{grid-column:1/-1}
+ @media(max-width:560px){.lk-row{grid-template-columns:1fr}}
+ .lk{display:flex;gap:4px}.lk-b{min-width:34px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.04);color:inherit;font:600 13px var(--f-mono);cursor:pointer}
+ .lk-b[aria-pressed="true"]{background:var(--gold);color:#0b1a2e;border-color:var(--gold)}
+ .exp-sec{display:grid;gap:2px;padding:12px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07)}.exp-sec h3{font-size:15px;margin:0 0 2px}
+ .exp-grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}.exp-cases{display:flex;flex-wrap:wrap;gap:5px}
+ .exp-case{font:600 12px var(--f-mono);padding:5px 8px;border-radius:8px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.04);color:inherit;cursor:pointer}
+ .exp-case.done{border-color:var(--ok);color:var(--ok)}
+ #expCard{margin-bottom:12px;display:grid;gap:10px}
+ .exp-tbl{font-size:12.5px}.exp-tbl td,.exp-tbl th{padding:6px 8px;vertical-align:top}
+ .tbl-wrap{overflow-x:auto}.exp-tbl{width:100%;border-collapse:collapse}.exp-tbl th{text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid rgba(255,255,255,.12)}.exp-tbl td{border-bottom:1px solid rgba(255,255,255,.06)}`; document.head.appendChild(st); })();
 </script>
 
 </body>
