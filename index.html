@@ -4623,7 +4623,7 @@ function expRegister(then,opt={}){
 function expWelcome(me,then){
   modal(`<div class="mhead"><div><div class="eyebrow">Expert review · ยินดีต้อนรับกลับ</div><h2 style="font-size:19px">${esc(me.name)}</h2></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>
    <div class="muted" style="font-size:13px">${esc([me.prof,me.deptLabel||me.dept||me.spec].filter(Boolean).join(' · '))}</div>
-   <div class="exp-code"><span>รหัสผู้ประเมิน</span><b class="mono">${esc(me.expertId)}</b><small>ใช้รหัสนี้เพื่อทำต่อบนเครื่องอื่น</small></div>
+   <div class="exp-code"><span>รหัสผู้ประเมิน</span><b class="mono">${esc(me.expertId)}</b><small>ระบบสร้างให้อัตโนมัติ ไม่ซ้ำกันในแต่ละคน · ไม่ต้องส่งให้ใคร ใช้เมื่อเปลี่ยนไปทำต่อบนเครื่องอื่น</small></div>
    <p style="margin:0;font-size:14px">${expProgressTxt()}</p>
    <div class="flex" style="flex-wrap:wrap"><button class="btn ghost sm" id="exNot">ไม่ใช่ฉัน · ลงทะเบียนใหม่</button><button class="btn ghost sm" id="exEdit">แก้ไขข้อมูล</button><button class="btn gold right-al" id="exCont">ทำต่อ →</button></div>`);
   $('#exCont').onclick=()=>expActivate(me,then);
@@ -4666,7 +4666,7 @@ function expBar(){ document.body.classList.toggle('expert',EXP.on()); if(!EXP.on
 function expPanel(){ const rated=EXP.cases(), f=EXP.form();
   modal(`<div class="mhead"><div><div class="eyebrow">Expert review · ${esc(EXP.me.name)}</div><h2 style="font-size:19px">ความคืบหน้าการประเมิน</h2></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>
    <div class="kpis"><div class="kpi"><b>${Object.keys(rated).length}/${CASES.length}</b><span>เคสที่ประเมินแล้ว</span></div><div class="kpi"><b>${f?'✓':LS.get('ert.expert.draft',null)?'ร่าง':'—'}</b><span>แบบประเมินภาพรวม</span></div>
-     <div class="kpi exp-code" style="margin:0"><span>รหัสผู้ประเมิน</span><b class="mono">${esc(EXP.me.expertId)}</b><small>ไม่ต้องทำครั้งเดียว · ใช้รหัสนี้ทำต่อบนเครื่องอื่น</small></div></div>
+     <div class="kpi exp-code" style="margin:0"><span>รหัสผู้ประเมิน</span><b class="mono">${esc(EXP.me.expertId)}</b><small>ระบบสร้างให้อัตโนมัติ · ใช้เมื่อเปลี่ยนไปทำต่อบนเครื่องอื่น</small></div></div>
    <p class="muted" style="margin:0;font-size:13px">แนะนำให้เล่นอย่างน้อย 1 เคสต่อกลุ่มผู้ป่วย (ผู้ใหญ่ · เด็ก · ทารกแรกเกิด · หญิงตั้งครรภ์) และลอง Equipment lab ก่อนทำแบบประเมินภาพรวม · กดเลขเคสเพื่อเล่นทันที</p>
    ${expCaseGrid()}
    <div class="flex"><button class="btn ghost sm" id="exOut">ออกจากโหมดผู้เชี่ยวชาญ</button><button class="btn ghost sm" id="exEd">แก้ไขข้อมูล</button><button class="btn gold right-al" id="exForm">${f?'แก้ไข':'ทำ'}แบบประเมินภาพรวม →</button></div>`); $('#mbox').classList.add('wide');
@@ -5336,7 +5336,7 @@ function lobbyOn(){
 }
 function lobbyOff(){ if(!G3.ok) return; W3.lobby=false; if(W3.ctl) W3.ctl.autoRotate=false; if(W3.lobbyNurse) W3.lobbyNurse.visible=false; if(W3.player) try{ setPose(W3.player,null); }catch(e){} }
 { const _s=show; show=function(id){ _s(id); if(!G3.ok) return;
-    if(LOBBY_SCR.has(id)){ lobbyOn(); $('#stage').style.filter='blur(2.5px) brightness(.62) saturate(.9)'; }
+    if(LOBBY_SCR.has(id)){ lobbyOn(); $('#stage').style.filter=id==='scr-title'?'blur(2.5px) brightness(.6) saturate(.9)':'blur(5px) brightness(.38) saturate(.8)'; }
     else { lobbyOff(); if(id==='scr-game') W3.lobbyPt=false; } }; }
 // keep the orbit gentle: limit the swing so the bed stays in view
 setInterval(()=>{ if(!G3.ok||!W3.lobby||!W3.ctl) return; const a=W3.ctl.getAzimuthalAngle?W3.ctl.getAzimuthalAngle():0; if(a>1.15) W3.ctl.autoRotateSpeed=-Math.abs(W3.ctl.autoRotateSpeed); if(a<.35) W3.ctl.autoRotateSpeed=Math.abs(W3.ctl.autoRotateSpeed); },400);
@@ -5376,6 +5376,17 @@ function shallowMask(mask){ if(VNECK_CACHE.has(mask.uuid)) return VNECK_CACHE.ge
 (()=>{ const st=document.createElement('style'); st.textContent=`
  #scr-title::before{content:'';position:fixed;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(6,14,26,.86) 0%,rgba(6,14,26,.62) 45%,rgba(6,14,26,.2) 75%,rgba(6,14,26,.1) 100%);z-index:-1}
  #scr-title{z-index:10}
+ /* readable text over the ward backdrop */
+ #scr-guide .gd-steps li,#scr-guide .gd-card,#scr-guide .gd-lv,#scr-guide .gd-foot{background:rgba(9,22,40,.94)!important;border-color:rgba(255,255,255,.14)!important}
+ #scr-guide .gd-steps li.hl{background:rgba(14,52,60,.95)!important;border-color:rgba(46,196,182,.55)!important}
+ #scr-guide .gd-hero{background:linear-gradient(135deg,rgba(14,52,60,.96),rgba(12,26,48,.96))!important}
+ #scr-guide .gd-hero.exp{background:linear-gradient(135deg,rgba(60,46,14,.96),rgba(12,26,48,.96))!important}
+ #scr-guide .gd-steps p,#scr-guide .gd-lv p,#scr-guide .gd-card li,#scr-guide .gd-hero p{color:#e6eef6!important}
+ #scr-guide .gd-h{color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.6)}
+ #scr-guide .gd-note,#scr-guide .gd-time span{color:#b9c8d8!important}
+ #scr-guide .gd-tabs button:not([aria-selected="true"]){background:rgba(9,22,40,.92)}
+ #scr-level .lvc,#scr-level .glass,#scr-level .card,#scr-session .glass,#scr-dash .glass{background-color:rgba(9,22,40,.9)}
+ #scr-level h2,#scr-level .eyebrow{text-shadow:0 1px 6px rgba(0,0,0,.6)}
  @media (max-width:820px){ #scr-title::before{background:linear-gradient(180deg,rgba(6,14,26,.55),rgba(6,14,26,.8))} }`; document.head.appendChild(st); })();
 
 /* ---------- friendly Asian faces: gentle smile, softer nose bridge, almond eyes ---------- */
@@ -5405,6 +5416,33 @@ function browFit(geo){ if(!geo||geo.userData.face) return; const P=geo.attribute
     root.traverse(m=>{ if(!m.isMesh||!m.material||!m.material.color||m.geometry.type!=='SphereGeometry') return; const hex=m.material.color.getHexString();
       if(['f6f3ee','3b2416','050505','ffffff'].includes(hex)&&m.parent&&!m.userData.almond){ m.scale.y*=.84; m.userData.almond=true; } });
     return root; }; }
+/* ================================================================
+   AUDIENCE VIEWS — learners see only what they need.
+   · default (learner link): register · create avatar · exam room · how to play
+   · ?admin=1  : + Dashboard ผู้สอน, GLB Lab (remembered for this browser tab)
+   · ?expert=1 : + Expert review button (expert mode itself is handled in p22)
+   The "BETA" tag becomes the release badge.
+   ================================================================ */
+const SENTINEL_VERSION='v1.0';
+const VIEW=(()=>{ const q=location.search+location.hash; let admin=/[?&#]admin\b/.test(q), expert=/[?&#]expert\b/.test(q);
+  try{ if(admin) sessionStorage.setItem('ert.view.admin','1'); else admin=sessionStorage.getItem('ert.view.admin')==='1'; if(/[?&#]learner\b/.test(q)){ sessionStorage.removeItem('ert.view.admin'); admin=false; } }catch(e){}
+  try{ expert=expert||sessionStorage.getItem('ert.expertOn')==='1'; }catch(e){}
+  return {admin,expert}; })();
+function applyView(){
+  const hide=(sel,h)=>{ const e=$(sel); if(e) e.style.display=h?'none':''; };
+  hide('#btnDashFromTitle',!VIEW.admin); hide('#btnLab',!VIEW.admin); hide('#btnExpert',!(VIEW.admin||VIEW.expert));
+  // the row that held Dashboard + GLB Lab collapses when both are hidden
+  const row=$('#btnDashFromTitle')?.parentElement; if(row&&row.classList.contains('seg')) row.style.display=VIEW.admin?'':'none';
+  const tag=$('.beta-tag'); if(tag){ tag.textContent=VIEW.admin?'ADMIN':(VIEW.expert||EXP.on())?'EXPERT REVIEW':SENTINEL_VERSION; tag.classList.toggle('rel',!VIEW.admin&&!(VIEW.expert||EXP.on())); }
+  document.body.classList.toggle('view-admin',VIEW.admin);
+}
+applyView(); setTimeout(applyView,400);
+{ const _s=show; show=function(id){ _s(id); applyView(); }; }
+// the dashboard's home button (top bar) is for admins only; learners never land on it by accident
+{ const _od=openDash; openDash=function(){ if(!VIEW.admin){ toast('Dashboard สำหรับผู้สอน: เปิดด้วยลิงก์ผู้ดูแล','',2600); return; } return _od.apply(this,arguments); }; }
+// feedback wording for the release
+{ const _fo=fbOpen; fbOpen=function(){ _fo.apply(this,arguments); const e=$('#mbox .eyebrow'); if(e&&/Beta/.test(e.textContent)) e.textContent=VIEW.expert||EXP.on()?'Expert review · ความคิดเห็น':'ความคิดเห็นและแจ้งปัญหา'; }; }
+(()=>{ const st=document.createElement('style'); st.textContent=`.beta-tag.rel{border-color:rgba(255,255,255,.28);color:#b9c8d8;letter-spacing:.06em}`; document.head.appendChild(st); })();
 </script>
 
 </body>
