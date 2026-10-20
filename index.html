@@ -3,6 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="robots" content="noindex">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SENTINEL">
+<meta name="theme-color" content="#0b1a2e">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 </head>
 <body>
 <script>/* ERT_BACKEND: ใส่ URL ของ Google Apps Script Web App (ลงท้าย /exec) เพื่อส่งผลเข้า Google Sheet · เว้นว่างเมื่อใช้ใน claude.ai หรือในเครื่อง */ window.ERT_BACKEND="https://script.google.com/macros/s/AKfycbxR8-UM3hefc-Al8S-B3vO68nXRF1bjQznbAycTqmSxYx_Dqd91fwoeANXuZC1zyGoG/exec";</script>
@@ -14,6 +21,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="SENTINEL">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -5444,6 +5455,159 @@ applyView(); setTimeout(applyView,400);
 // feedback wording for the release
 { const _fo=fbOpen; fbOpen=function(){ _fo.apply(this,arguments); const e=$('#mbox .eyebrow'); if(e&&/Beta/.test(e.textContent)) e.textContent=VIEW.expert||EXP.on()?'Expert review · ความคิดเห็น':'ความคิดเห็นและแจ้งปัญหา'; }; }
 (()=>{ const st=document.createElement('style'); st.textContent=`.beta-tag.rel{border-color:rgba(255,255,255,.28);color:#b9c8d8;letter-spacing:.06em}`; document.head.appendChild(st); })();
+/* ================================================================
+   v27 · VOICE GENDER · NATURAL RHYTHM · PHONE LAYOUT
+   1) Voice gender: voices are classified by name; "Female" no longer matches the male pattern.
+      Most devices ship only one Thai voice (iPhone/iPad: female · Windows desktop: male), so the
+      avatar screen now lets the player pick the voice and hear it. When the needed gender is
+      missing, the available voice is pitch-shifted and the screen says so.
+   2) Rhythm: whole sentences per utterance (no 34-character chopping), steady rate/pitch per
+      speaker, short natural gaps between sentences and longer ones between speakers.
+   3) Phones: portrait sheet sizes to its content (max 46%) with a compact header; landscape puts
+      the vital signs in the top bar and gives both panels more height.
+   ================================================================ */
+
+/* ---------- 1) voice gender ---------- */
+function vGender(v){ const n=((v&&v.name)||'')+' '+((v&&v.voiceURI)||'');
+  if(/female|หญิง|kanya|narisa|premwadee|achara|google/i.test(n)) return 'F';
+  if(/\bmale\b|ชาย|niwat|pattara|somchai|manop/i.test(n)) return 'M';
+  return ''; }
+function vPrefs(){ try{ return LS.get('ert.voice',{})||{}; }catch(e){ return {}; } }
+function vSorted(){ if(!VOICES.length) loadVoices(); return VOICES.slice().sort((a,b)=>voiceRank(b)-voiceRank(a)); }
+voiceFor=function(g){ const vs=vSorted(); const want=g==='M'?'M':'F';
+  const pu=vPrefs()[want]; let v=pu&&vs.find(x=>x.voiceURI===pu);
+  if(!v) v=vs.find(x=>vGender(x)===want)||vs.find(x=>!vGender(x))||vs[0]||null;
+  const vg=v?vGender(v):'';
+  // pitch-shift only when the voice is clearly the other gender (or there is no Thai voice at all)
+  const shift=!v||(vg&&vg!==want); return {v,pitch:shift?(want==='M'?.72:1.28):1,shift}; };
+function vMissing(g){ const vs=vSorted(); return !vs.some(x=>vGender(x)===g||!vGender(x)); }
+
+/* ---------- 2) natural rhythm ---------- */
+{ const _n=ttsNorm; ttsNorm=function(t){ return _n(String(t||'').replace(/[\u{1F300}-\u{1FAFF}☀-➿️]/gu,'').replace(/[“”"()]/g,' ').replace(/→/g,' ')).replace(/\s{2,}/g,' ').trim(); }; }
+ttsPhrases=function(t){ const s=ttsNorm(t); if(!s) return [];
+  // sentence ends: Thai polite particles or punctuation followed by a space
+  const sent=s.replace(/(ครับ|ค่ะ|คะ|นะ|[.!?])\s+/g,'$1\u0001').split('\u0001').map(x=>x.trim()).filter(Boolean), out=[]; let cur='';
+  for(const p of sent){ if(cur&&(cur.length+p.length)>120){ out.push(cur); cur=p; } else cur=cur?cur+' '+p:p; }
+  if(cur) out.push(cur);
+  const fin=[]; out.forEach(c=>{ while(c.length>150){ const i=c.lastIndexOf(' ',120); if(i<40) break; fin.push(c.slice(0,i)); c=c.slice(i+1); } fin.push(c); });
+  return fin.map(t=>({t,end:true})); };
+Object.assign(SPK,{player:()=>({g:playerGender(),rate:1,dp:0}),md:()=>({g:'M',rate:.96,dp:-.04}),rn:()=>({g:'F',rate:1,dp:.03}),rn2:()=>({g:'M',rate:1,dp:.02}),
+  op:()=>({g:'F',rate:.92,dp:0}),pt:()=>({g:(C&&C.cs.p.sex)||'M',rate:.88,dp:(C&&C.cs.p.ageYears>65)?-.06:0}),help:()=>({g:playerGender()==='M'?'F':'M',rate:1,dp:.02}),fam:()=>({g:'F',rate:.95,dp:.02})});
+const TTS_BASE=/iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent)&&'ontouchend' in document?.98:.95;
+sayUtter=function(text,o){ return new Promise(res=>{ try{ const V=voiceFor(o.g); const u=new SpeechSynthesisUtterance(text); u.lang='th-TH'; if(V.v) u.voice=V.v;
+    u.rate=Math.min(1.4,Math.max(.6,(+o.rate||1)*TTS_BASE)); u.pitch=Math.min(2,Math.max(.1,(+V.pitch||1)+(+o.dp||0))); u.volume=o.vol??1;
+    let done=false; const fin=()=>{ if(!done){ done=true; res(); } }; u.onend=u.onerror=fin; try{ speechSynthesis.resume(); }catch(e){} speechSynthesis.speak(u); setTimeout(fin,2500+text.length*170); }catch(e){ res(); } }); };
+spqRun=async function(){ if(SPQ.busy) return; SPQ.busy=true; const gen=SPQ.gen;
+  while(SPQ.q.length&&gen===SPQ.gen){ const it=SPQ.q.shift(); const o=Object.assign({},(SPK[it.who]||SPK.player)(),it.opt);
+    const ph=ttsPhrases(it.text); for(let i=0;i<ph.length&&gen===SPQ.gen;i++){ await sayUtter(ph[i].t,o); if(i<ph.length-1) await sleep(140); }
+    it.done(); if(SPQ.q.length) await sleep(it.who!==SPQ.q[0].who?480:220); }
+  SPQ.busy=false; };
+
+/* ---------- voice picker on the avatar screen ---------- */
+function vcGroupHTML(){ const g=(GS.av&&GS.av.gender)==='M'?'M':'F', vs=vSorted(), pu=vPrefs()[g]||'';
+  const gl={M:'ชาย',F:'หญิง','':'ไม่ระบุเพศ'};
+  const opts=`<option value="">อัตโนมัติ (แนะนำ)</option>`+vs.map(v=>`<option value="${esc(v.voiceURI)}" ${v.voiceURI===pu?'selected':''}>${esc(v.name.replace(/\s*\(.*?\)\s*/g,' ').replace(/Microsoft\s*/,'').trim())} · ${gl[vGender(v)]}</option>`).join('');
+  const note=!vs.length?'เครื่องนี้ยังไม่มีเสียงภาษาไทย ตัวเกมเล่นได้ตามปกติแต่จะไม่มีเสียงพูด'
+    :vMissing(g)?`เครื่องนี้ไม่มีเสียงภาษาไทยเพศ${gl[g]} ระบบจะใช้เสียงที่มีและปรับโทนให้${g==='M'?'ต่ำ':'สูง'}ลง (iPhone/iPad มักมีเฉพาะเสียงหญิง · Windows มักมีเฉพาะเสียงชาย · Microsoft Edge มีทั้งสองเสียง)`
+    :'กด ▶ ฟังเสียง เพื่อทดลอง เลือกเสียงอื่นได้ถ้ามีหลายเสียงในเครื่อง';
+  return `<h3>เสียงพูดของฉัน</h3><div class="vc-row"><select class="inp" id="vcSel" aria-label="เลือกเสียงพูด">${opts}</select><button class="btn sm" id="vcTest" type="button">▶ ฟังเสียง</button></div><div class="vc-note">${note}</div>`; }
+function vcWire(){ const box=$('#vcGroup'); if(!box) return; box.innerHTML=vcGroupHTML();
+  $('#vcSel').onchange=e=>{ const g=(GS.av&&GS.av.gender)==='M'?'M':'F'; const p=vPrefs(); if(e.target.value) p[g]=e.target.value; else delete p[g]; LS.set('ert.voice',p); vcTest(); };
+  $('#vcTest').onclick=vcTest; }
+function vcTest(){ const was=GS.sound; GS.sound=true; speak(`สวัสดี${polite()} ผู้ป่วยเตียงนี้หายใจเร็วขึ้น ขอวัดสัญญาณชีพก่อนนะ${polite()}`,{who:'player',now:true}).then(()=>{ GS.sound=was; }); }
+{ const _rp=renderAvPanel; renderAvPanel=function(){ _rp.apply(this,arguments);
+    const gGrp=[...$$('#avPanel .opt-group')].find(x=>x.querySelector('[data-g=gender]')); if(!gGrp) return;
+    const d=document.createElement('div'); d.className='opt-group'; d.id='vcGroup'; gGrp.after(d); vcWire(); }; }
+if('speechSynthesis' in window) speechSynthesis.addEventListener?.('voiceschanged',()=>{ loadVoices(); if($('#vcGroup')&&!$('#scr-avatar').hidden&&document.activeElement?.id!=='vcSel') vcWire(); });
+
+/* ---------- 3) phone layout ---------- */
+const MQ_L=matchMedia('(max-height:500px) and (orientation:landscape)');
+function mobLayout(){
+  const seg=$('#sheetSeg'), game=$('#scr-game');
+  // portrait: tabs sit on top of whichever sheet is visible
+  if(seg&&MOB.portrait()&&game&&!game.hidden){ const acting=document.body.classList.contains('acting')&&document.body.classList.contains('sheetAct');
+    const pnl=acting?$('#actionPanel'):$('#casePanel'); if(pnl){ const r=pnl.getBoundingClientRect(), gr=game.getBoundingClientRect(); if(r.height>0){ const b=Math.round(gr.bottom-r.top+6)+'px'; if(seg.style.bottom!==b) seg.style.bottom=b; } } }
+  else if(seg&&seg.style.bottom) seg.style.bottom='';
+  // landscape: vitals strip in the top bar, between the ERT badge and the timer
+  const hud=$('#vitHud');
+  if(hud&&MQ_L.matches){ const tag=$('#topbar .brand .tag'), first=[...$$('#topbar .chip,#topbar .iconbtn')].find(e=>!e.hidden&&getComputedStyle(e).display!=='none');
+    if(tag&&first){ const L=Math.round(tag.getBoundingClientRect().right+8), R=Math.round(innerWidth-first.getBoundingClientRect().left+8), w=innerWidth-L-R;
+      document.body.classList.toggle('vhTop',w>=300);
+      if(w>=300){ hud.style.setProperty('left',L+'px','important'); hud.style.setProperty('right',R+'px','important'); }
+      else { hud.style.removeProperty('left'); hud.style.removeProperty('right'); } } }
+  else if(hud){ document.body.classList.remove('vhTop'); hud.style.removeProperty('left'); hud.style.removeProperty('right'); }
+}
+setInterval(mobLayout,300); addEventListener('resize',()=>setTimeout(mobLayout,60));
+
+(()=>{ const st=document.createElement('style'); st.textContent=`
+ #vcGroup .vc-row{display:flex;gap:8px;align-items:center}
+ #vcGroup select{flex:1;min-width:0}
+ #vcGroup .vc-note{font-size:12.5px;color:#b9c8d8;margin-top:6px;line-height:1.45}
+ @media (max-width:820px){
+  /* compact sheet header */
+  #casePanel .cp-head{padding:9px 12px 7px}
+  #casePanel .cp-head h2{font-size:16.5px!important;line-height:1.25}
+  #casePanel .cp-head .cs-en{font-size:12px;margin-top:2px}
+  #casePanel .cp-head .muted{font-size:12px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #casePanel .cp-body{padding:10px 12px;gap:9px}
+  #casePanel .cp-foot{padding:8px 12px}
+  #casePanel .cp-foot .btn{min-height:42px}
+ }
+ /* phones in portrait: the sheet grows with its content, up to 46% of the screen */
+ @media (max-width:599px) and (orientation:portrait){
+  #casePanel{height:auto!important;max-height:46%!important}
+  #casePanel .cp-body{flex:1 1 auto;min-height:0}
+  #actionPanel{height:46%!important}
+  body.sheetMin #casePanel,body.sheetMin #actionPanel{height:auto!important;max-height:none!important}
+ }
+ @media (max-height:500px) and (orientation:landscape){
+  /* top bar: fold extra buttons into ⋯ */
+  body.ingame #btnRef,body.ingame #btnGuide,body.ingame #btnFb,body.ingame #btnSound,body.ingame #expBar{display:none!important}
+  body.ingame #btnMore{display:grid}
+  body.touch .iconbtn{width:34px!important;height:34px!important}
+  #topbar .chip{padding:4px 9px;font-size:12.5px}
+  /* vitals: one row in the top bar */
+  body.vhTop #vitHud{top:calc(4px + env(safe-area-inset-top,0px))!important;padding:2px 3px!important;border-radius:8px}
+  body.vhTop #vitHud .vh-row{grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:2px!important}
+  body.vhTop #vitHud .vh{padding:1px 4px 2px;border-radius:6px;min-height:0}
+  body.vhTop #vitHud .vh .vl{font-size:8.5px;line-height:1.1}
+  body.vhTop #vitHud .vh .vv{font-size:14px!important;line-height:1.1}
+  body.vhTop #vitHud .vh[data-k=bp] .vv{font-size:12px!important}
+  body.vhTop #vitHud .vh .va{display:none}
+  /* panels get the full height under the top bar */
+  #casePanel{top:46px!important;bottom:30px!important;width:40vw!important}
+  #actionPanel{top:46px!important;bottom:30px!important;width:32vw!important}
+  #casePanel .cp-head{padding:7px 12px 6px}
+  #casePanel .cp-head .pt-row{display:none}
+  #casePanel .cp-head h2{font-size:15px!important;line-height:1.2}
+  #casePanel .cp-head .cs-en{display:none}
+  #casePanel .cp-head .muted{font-size:11.5px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #casePanel .cp-body{padding:8px 12px;gap:8px;font-size:13.5px}
+  #casePanel .cp-foot{padding:6px 10px}
+  #casePanel .cp-foot .btn{min-height:36px;padding:6px 12px;font-size:13.5px}
+  #sheetSeg{display:none!important}
+  body.acting #actionPanel,body.acting #casePanel{visibility:visible!important;pointer-events:auto!important}
+  body.sheetMin #casePanel #cpBody{display:grid}
+  #actionPanel{padding:8px!important;display:block!important;overflow:auto!important}
+  #actionPanel[hidden]{display:none!important}
+  #actionPanel>*{margin-bottom:7px}
+  body.vhTop #vitHud .vh[data-k=bp] .vv{font-size:11.5px!important;letter-spacing:-.02em}
+  #actionPanel .act{min-height:40px}
+  #stepRail{bottom:2px!important;transform:scale(.78)!important;left:50%!important;right:auto!important;transform-origin:bottom center!important;translate:-50% 0}
+ }`; document.head.appendChild(st); })();
+
+/* ---------- 4) install as an app (home screen / desktop) ---------- */
+{ let deferred=null; const standalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+  const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&'ontouchend' in document);
+  const btn=document.createElement('button'); btn.className='btn sm'; btn.id='btnInstall'; btn.type='button'; btn.innerHTML='📲 ติดตั้งเป็นแอป'; btn.hidden=true;
+  btn.style.cssText='margin-top:14px;width:max-content'; $('#scr-title .hero')?.appendChild(btn);
+  const upd=()=>{ btn.hidden=standalone()||!(deferred||isIOS); };
+  addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); deferred=e; upd(); });
+  addEventListener('appinstalled',()=>{ deferred=null; upd(); toast('ติดตั้ง SENTINEL แล้ว เปิดได้จากหน้าจอหลัก','ok',3000); });
+  btn.onclick=async()=>{ if(deferred){ deferred.prompt(); try{ await deferred.userChoice; }catch(e){} deferred=null; upd(); return; }
+    modal(`<div class="mhead"><div><div class="eyebrow">ติดตั้งเป็นแอป</div><h2 style="font-size:19px">เพิ่ม SENTINEL ไว้บนหน้าจอหลัก</h2></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>
+      <ol style="margin:0;padding-left:20px;line-height:1.9;font-size:15px"><li>เปิดหน้านี้ใน <b>Safari</b></li><li>แตะปุ่ม <b>แชร์</b> (สี่เหลี่ยมมีลูกศรชี้ขึ้น)</li><li>เลื่อนลงแล้วเลือก <b>เพิ่มไปยังหน้าจอโฮม</b></li><li>แตะ <b>เพิ่ม</b> ไอคอน SENTINEL จะอยู่บนหน้าจอหลัก</li></ol>`); };
+  upd(); }
 </script>
 
 </body>
