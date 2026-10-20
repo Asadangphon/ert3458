@@ -4994,6 +4994,7 @@ addEventListener('orientationchange',()=>setTimeout(()=>dispatchEvent(new Event(
  #sheetSeg{display:none}
  #btnMore{display:none;font-size:20px;line-height:1}
  #actionPanel>*{flex-shrink:0;min-height:auto}
+ #actionPanel[hidden]{display:none!important}
  @media (max-width:820px){
   .inp,select.inp,textarea.inp,input{font-size:16px}
   #topbar{padding-top:max(8px,env(safe-area-inset-top,0px))}
@@ -5056,8 +5057,8 @@ addEventListener('orientationchange',()=>setTimeout(()=>dispatchEvent(new Event(
   body.ingame .brand .brand-name,body.ingame .beta-tag,body.ingame #chipCase,body.ingame #chipPlayer{display:none}
   #casePanel{top:48px!important;bottom:34px!important;left:max(6px,env(safe-area-inset-left,0px))!important;width:42vw!important;height:auto!important;right:auto!important}
   #actionPanel{top:48px!important;bottom:34px!important;right:max(6px,env(safe-area-inset-right,0px))!important;width:30vw!important;left:auto!important;height:auto!important;max-height:none!important;grid-template-columns:1fr!important}
-  #vitHud{top:48px;bottom:auto!important;left:calc(42vw + 12px)!important;right:6px;transform:none!important;min-width:0!important;max-width:none!important;padding:4px}
-  body.acting #vitHud{right:calc(30vw + 12px)}
+  #vitHud{top:48px;bottom:auto!important;left:calc(42vw + env(safe-area-inset-left,0px) + 16px)!important;right:6px;transform:none!important;min-width:0!important;max-width:none!important;padding:4px}
+  body.acting #vitHud{right:calc(30vw + env(safe-area-inset-right,0px) + 16px)}
   #vitHud .vh-head{display:none}.vh-row{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:3px!important}
   .vh{padding:2px 5px}.vh .vv{font-size:15px!important}.vh[data-k=bp] .vv{font-size:13px!important}.vh .vu{display:none}.vh .vl{font-size:9.5px}
   #actionPanel .tray-tabs{display:flex!important;flex-wrap:wrap;gap:4px}#actionPanel .tray-tabs>*{height:auto!important}
