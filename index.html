@@ -2028,7 +2028,7 @@ function rCare(){
    <p class="muted" style="font-size:13.5px">เลือกการดูแลจากแผงด้านขวา แต่ละอย่างใช้เวลา จัดลำดับความสำคัญให้ดี ทีมอาจมาถึงก่อนที่คุณจะทำครบ</p>
    <div class="timeline">${C.careOrder.length?C.careOrder.map(o=>`<div>${fmtT(o.t*60)}  ${esc(ACTIONS[o.k].t)}</div>`).join(''):'<div>ยังไม่มีการดูแล</div>'}</div>
    ${hint('Airway & Breathing: O₂ ให้ SpO₂ > 95% (COPD 92–95%) เตรียม IPD record, Emergency cart, Monitor/Defibrillator · Circulation: Monitor ECG, Call for ECG, IV line · Neuro: POCT glucose, IV, ECG, สงสัย stroke กด 6 · และรายงานแพทย์เจ้าของไข้ แจ้งญาติ')}`;
-  actions(`<div class="eyebrow">การดูแลระหว่างรอทีม</div>`+C.careList.map(k=>{ const a=ACTIONS[k]; const d=C.done.has(k); return `<button class="act ${d?(isBad(k)?'bad':'done'):''}" data-k="${k}" ${d||C.arrived||C.busy?'disabled':''}><span class="ic">${a.min<1?'½':a.min}′</span><span>${esc(a.t)}${na&&a.rn?' <small>(หน้าที่ RN)</small>':''}</span></button>`; }).join(''));
+  actions(`<div class="eyebrow">การดูแลระหว่างรอทีม</div>`+C.careList.map(k=>{ const a=ACTIONS[k]; const d=C.done.has(k); return `<button class="act ${d?(isBad(k)?'bad':'done'):''}" data-k="${k}" ${d||C.arrived||C.busy?'disabled':''}>${tBadge(a.min)}<span>${esc(a.t)}${na&&a.rn?' <small>(หน้าที่ RN)</small>':''}</span></button>`; }).join(''));
   $$('#actionPanel .act').forEach(b=>b.onclick=()=>doCare(b.dataset.k));
   setFoot(C.arrived?[{id:'bH',t:'ส่งต่อข้อมูลให้ทีม →',cls:'primary',on:()=>go('handover')}]:[{id:'bW',t:'รอทีมมาถึง',cls:'ghost',on:()=>{ C.careClock=C.arrive; arriveTeam(); }}]);
 }
@@ -3828,7 +3828,7 @@ function renderTray(){
   const lock=C.arrived||C.busy;
   const item=k=>{ const a=ACTIONS[k]; if(!a) return ''; const was=C.done.has(k), chg=CHANGEABLE.has(k)&&was, d=was&&k!=='revs'&&!chg, g=PICK_OF[k], open=C.pickOpen===k&&!d&&!lock;
     const pv=was&&C.variant[k]?PICK[g].opts.find(o=>o.id===C.variant[k]):null;
-    return `<button class="act ${d?(!ex&&isBad(k)?'bad':'done'):chg?'done':''} ${open?'open':''}" data-tk="${k}" ${d||lock?'disabled':''}><span class="ic">${a.min<1?'½':a.min}′</span><span>${esc(trayLabel(k))}${pv?`<small>✓ ใช้อยู่: ${esc(pv.t)}</small>`:''}${g&&!d?` <small>${chg?'เปลี่ยน / ปรับอุปกรณ์ ▸':'เลือกอุปกรณ์ / วิธี ▸'}</small>`:''}${na&&a.rn?' <small>(หน้าที่ RN)</small>':''}</span></button>
+    return `<button class="act ${d?(!ex&&isBad(k)?'bad':'done'):chg?'done':''} ${open?'open':''}" data-tk="${k}" ${d||lock?'disabled':''}>${tBadge(a.min)}<span>${esc(trayLabel(k))}${pv?`<small>✓ ใช้อยู่: ${esc(pv.t)}</small>`:''}${g&&!d?` <small>${chg?'เปลี่ยน / ปรับอุปกรณ์ ▸':'เลือกอุปกรณ์ / วิธี ▸'}</small>`:''}${na&&a.rn?' <small>(หน้าที่ RN)</small>':''}</span></button>
       ${open?`<div class="pick">${pickOpts(g,cs).map(o=>`<button class="pk" data-pv="${o.id}">${esc(o.t)}</button>`).join('')}<button class="pk ghost" data-pv="">ยกเลิก</button></div>`:''}`; };
   actions(`<div class="eyebrow">อุปกรณ์และการพยาบาล · เลือกให้ตรงกับผู้ป่วยรายนี้</div>
     ${(T.pin||[]).filter(k=>k!=='recall'||C.worse).map(item).join('')}
@@ -5870,6 +5870,103 @@ onFrame(()=>{ if(!W3.pt||W3.mode!=='ward'||!C) return; if(W3.bvm&&W3.bvmOn) retu
   const st=document.createElement('style'); st.textContent=`#vhEcg{margin-left:auto;width:160px;height:22px;border-radius:6px;background:#06111e;flex:none}
   @media (max-width:599px){#vhEcg{width:110px}}`; document.head.appendChild(st); }
 if(window.__ert) window.__ert.realism={MON2,BRTH,rhythmFor,alarmBurst,ambEvent};
+
+/* ================================================================
+   TIME SYMBOLS & SCORING EXPLAINED — for players (rules, no formulas) and experts (full formulas)
+   · action buttons show "30 วินาที / 1 นาที / 2 นาที" instead of a bare ′ sign
+   · a legend above the action list, an ⓘ next to every clock, a tooltip on the top-bar timer
+   · the same explanation in the 📖 guide (player tab) and the full scoring rules (expert tab)
+   ================================================================ */
+function tBadge(min){ const sec=min<1, n=sec?String(Math.round(min*60)):String(min), u=sec?'วินาที':'นาที'; return `<span class="ic tb" title="ใช้เวลาประมาณ ${n} ${u}ในสถานการณ์"><b>${n}</b><i>${u}</i></span>`; }
+const TIME_HELP=`
+ <div class="th-list">
+  <div class="th-row"><span class="th-sym"><span class="chip red" style="pointer-events:none">⏱ <b>01:25</b></span></span><div><b>นาฬิกามุมขวาบน · เวลาจริง</b><p>เวลาที่คุณใช้จริงในเคสนี้ ระดับ 2 ต้องตัดสินใจตามทีมภายใน 120 วินาที ระดับ 3 ภายใน 90 วินาที (ระดับ 1 ไม่จับเวลา)</p></div></div>
+  <div class="th-row"><span class="th-sym"><span class="th-clk red">03:30</span></span><div><b>เวลาตั้งแต่ประกาศ · เวลาในสถานการณ์</b><p>นับ<b>ขึ้น</b>ตามการพยาบาลที่คุณทำ ไม่ใช่การนับถอยหลังและไม่ใช่การหักคะแนน ทีมจะมาถึงภายใน 8 นาที แต่คุณไม่รู้ว่านาทีไหน แถบสีแดงเต็มเมื่อทีมมาถึง และหลังจากนั้นทำการพยาบาลเพิ่มไม่ได้</p></div></div>
+  <div class="th-row"><span class="th-sym"><span class="th-clk gold">01:00</span></span><div><b>เวลาตั้งแต่เริ่มช่วยเหลือ</b><p>ขั้นช่วยเหลือทันทีก่อนแจ้งทีม ไม่มีเวลาตัดจบ แต่เวลาที่ผ่านไปทำให้อาการผู้ป่วยเปลี่ยน</p></div></div>
+  <div class="th-row"><span class="th-sym" style="gap:4px">${tBadge(.5)}${tBadge(1)}${tBadge(2)}</span><div><b>ตัวเลขบนปุ่มการพยาบาล</b><p>เวลาที่ใช้ทำการพยาบาลนั้น เมื่อกดแล้วนาฬิกาในสถานการณ์จะเดินไปตามนั้น เช่น เปิด IV 2 นาที ให้ O₂ 1 นาที จัดท่า 30 วินาที</p></div></div>
+  <div class="th-row"><span class="th-sym mono">00:30 · ให้ O₂</span><div><b>บันทึกเวลาในแผงซ้าย</b><p>นาที:วินาที ที่เริ่มทำข้อนั้น นับจากเวลาที่ประกาศ ใช้ทบทวนลำดับที่คุณทำ</p></div></div>
+  <div class="th-row"><span class="th-sym mono" style="color:var(--red)">▲ +12</span><div><b>ลูกศรในแถบสัญญาณชีพ</b><p>ค่าที่เปลี่ยนจากเดิมหลังการพยาบาลหรือเมื่อเวลาผ่านไป ▲ สูงขึ้น ▼ ลดลง แสดง 10 วินาที</p></div></div>
+ </div>`;
+const SCORE_HELP_PLAYER=`<ul class="th-ul">
+  <li><b>ทำสิ่งที่ช่วยชีวิตก่อน</b> ทุกการพยาบาลใช้เวลา ถ้ายังไม่แก้ปัญหาหลักของผู้ป่วย อาการจะแย่ลง</li>
+  <li><b>ถ้าผู้ป่วยทรุดลง</b> ให้ประเมินซ้ำ ช่วยเหลือ และโทรแจ้งทีมซ้ำ ทีมจะเร่งมา</li>
+  <li><b>คะแนนมาจาก</b> การทำสิ่งที่จำเป็นครบ การเริ่มจากเรื่องเร่งด่วนที่สุด และการไม่ทำสิ่งที่เป็นอันตราย · <b>การกดหลายข้อไม่ได้ทำให้ได้คะแนนมากขึ้น</b> เพราะเสียเวลา</li>
+  <li>แต่ละการพยาบาลทำได้ครั้งเดียว ยกเว้นวัดสัญญาณชีพซ้ำ และการปรับเพิ่ม/เปลี่ยนออกซิเจน</li>
+  <li><b>ผ่านเกณฑ์</b> เมื่อคะแนนเฉลี่ย ≥ 80% และไม่พลาดการตามทีมในผู้ป่วยที่เข้าเกณฑ์ (Critical miss)</li></ul>`;
+const SCORE_HELP_EXPERT=`<table class="th-tb"><thead><tr><th>หมวด</th><th>เต็ม</th><th>วิธีคิด</th></tr></thead><tbody>
+  <tr><td>เลือกเครื่องมือ EWS</td><td>10</td><td>ถูก 10 ผิด 0</td></tr>
+  <tr><td>ให้คะแนนรายพารามิเตอร์</td><td>20</td><td>20 × สัดส่วนข้อที่ถูก (เฉลี่ยรอบ 1 และ 2) · ระดับ 2 เปิดตารางหักครั้งละ 2 (สูงสุด 10) · ระดับ 3 เปิดตารางไม่ได้</td></tr>
+  <tr><td>คะแนนรวม & protocol</td><td>10</td><td>คะแนนรวมถูก 3 + ช่อง protocol ถูก 5 + ความถี่การติดตามถูก 2</td></tr>
+  <tr><td>วิเคราะห์ปัญหา</td><td>10</td><td>ปัญหาหลัก 4 + cue 4 × (ถูก − ผิด)/จำนวน cue + ผลที่ตามมา 2</td></tr>
+  <tr><td>ตัดสินใจตามทีม</td><td>15</td><td>ตาม/ไม่ตามถูก 10 + เกณฑ์ที่พบ 5 × สัดส่วน (เกณฑ์ปลอม −1.5, เกณฑ์ที่ไม่พบ −1) · ผู้ช่วยพยาบาลไม่รายงาน RN −5 · เกินเวลา −3 · “อาการไม่น่าไว้วางใจ” ไม่หักคะแนน</td></tr>
+  <tr><td>ประกาศ / สื่อสาร</td><td>10</td><td>หมายเลขถูก 4 (กดผิดได้ 1) + กลุ่ม ปัญหา สถานที่ ผู้แจ้ง ข้อละ 1.5 · ไม่กด 6 เมื่อสงสัย stroke −2 · กด 6 โดยไม่มีข้อบ่งชี้ −1 · กรณีไม่ตามทีม: รายงานถูกคน 10</td></tr>
+  <tr><td>ดูแลเบื้องต้น / แผน</td><td>20</td><td>ข้อต้องทำ 16 แบ่งเท่ากัน + ข้อแนะนำ 2/ข้อ (สูงสุด 4) − อันตราย 5/ข้อ − ข้อแรกไม่ใช่ข้อเร่งด่วน 2 (ระดับ 2+) − นอกขอบเขตผู้ช่วยพยาบาล 2/ข้อ · ช่วยเหลือเร่งด่วนตั้งแต่แรกพบ +2 (ไม่ทำ −1) · ทรุดแล้วไม่แจ้งซ้ำ −2 · อุปกรณ์ไม่เหมาะ ถึง −3 · รอบที่ 1 +2 ถึง −5 · ช่วยหัตถการ ±</td></tr>
+  <tr><td>SBAR</td><td>5</td><td>5 × สัดส่วน S, B, A, R และรายการการดูแลที่เลือกถูก</td></tr></tbody></table>
+ <p class="th-p"><b>เวลา:</b> ทีมมาถึง ระดับ 1 = 8 นาที · ระดับ 2 = 6–8 · ระดับ 3/Drill = 5–7 (สุ่ม ไม่บอกผู้เล่น) · ข้อที่ไม่เกี่ยวกับเคสไม่หักคะแนนแต่เสียเวลา · ผู้ป่วยแย่ลงตามเวลาเมื่อยังไม่ทำข้อ “ต้องทำก่อน” (ระดับ 1 ×0.5 · ระดับ 3 ×1.25) · ทรุดลงเมื่อ SpO₂ &lt; 85%, SBP &lt; 80 หรือระดับความรู้สึกตัวเปลี่ยน · แจ้งซ้ำแล้วทีมมาเร็วขึ้น 1.5 นาที</p>
+ <p class="th-p"><b>ผ่าน:</b> เฉลี่ย ≥ 80% และไม่มี Critical miss</p>`;
+function openTimeHelp(){ modal(`<div class="mhead"><div><div class="eyebrow">วิธีอ่านเวลาและสัญลักษณ์</div><h3 style="margin:2px 0 0">เวลาในเกมทำงานอย่างไร</h3></div><button class="iconbtn" data-close aria-label="ปิด">✕</button></div>
+  ${TIME_HELP}<h4 style="margin:12px 0 4px">การให้คะแนนช่วงนี้</h4>${SCORE_HELP_PLAYER}
+  <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn primary" data-close>เข้าใจแล้ว</button></div>`);
+  $$('#mbox [data-close]').forEach(b=>b.onclick=closeModal); }
+// ⓘ beside the clocks
+function addClockInfo(){ const ck=$('#cpBody .clock'); if(!ck||ck.querySelector('.th-i')) return;
+  const b=document.createElement('button'); b.className='th-i'; b.type='button'; b.title='เวลานี้คืออะไร'; b.setAttribute('aria-label','อธิบายเวลาและสัญลักษณ์'); b.textContent='ⓘ'; b.onclick=openTimeHelp; ck.appendChild(b);
+  const tl=$('#cpBody .timeline'); if(tl&&!tl.previousElementSibling?.classList?.contains('th-tlh')) tl.insertAdjacentHTML('beforebegin','<div class="th-tlh">บันทึกเวลา (นาที:วินาที นับจากประกาศ)</div>'); }
+{ const _r=rCare; rCare=function(){ _r.apply(this,arguments); addClockInfo(); }; }
+{ const _r=rFirst; rFirst=function(){ _r.apply(this,arguments); addClockInfo(); }; }
+// legend above the action list
+{ const _a=actions; actions=function(html){ if(html&&C&&(C.phase==='care'||C.phase==='first')&&/class="act/.test(html)){
+      html=`<div class="th-leg"><span>${tBadge(1)}</span><span>ตัวเลขบนปุ่ม = เวลาที่ใช้ทำการพยาบาลนั้น · ทีมมาถึงภายใน 8 นาที</span><button class="th-i sm" type="button" data-th aria-label="อธิบายเวลา">ⓘ</button></div>`+html; }
+    _a(html); const b=$('#actionPanel [data-th]'); if(b) b.onclick=openTimeHelp; }; }
+// top-bar timer: tooltip + tap to explain
+{ const ch=$('#chipTimer'); if(ch){ ch.title='เวลาจริงที่ใช้ในเคสนี้ · แตะเพื่อดูคำอธิบาย'; ch.style.cursor='pointer'; ch.onclick=openTimeHelp; } }
+// 📖 guide: player tab gets the time + scoring card; expert tab gets the full rules
+{ const _g=guideHTML; guideHTML=function(tab){ let h=_g(tab);
+    if(tab==='expert') h+=`<details class="gd-card" open><summary><b>เกณฑ์การให้คะแนนฉบับเต็ม (100 คะแนน / เคส)</b></summary><div style="margin-top:10px">${SCORE_HELP_EXPERT}</div></details>
+      <details class="gd-card"><summary><b>เวลาและสัญลักษณ์ที่ผู้เล่นเห็น</b></summary><div style="margin-top:10px">${TIME_HELP}</div></details>`;
+    else h=h.replace('<h3 class="gd-h">ระดับความยาก</h3>',`<div class="gd-card"><h3>⏱ เวลาและสัญลักษณ์</h3>${TIME_HELP}<h3 style="margin-top:12px">ทำอย่างไรให้ได้คะแนน</h3>${SCORE_HELP_PLAYER}</div><h3 class="gd-h">ระดับความยาก</h3>`);
+    return h; }; }
+{ const st=document.createElement('style'); st.textContent=`
+ .act .ic.tb{width:38px;height:34px;display:grid;grid-template-rows:auto auto;place-items:center;align-content:center;gap:0;line-height:1;padding:2px 0}
+ .act .ic.tb b{font:700 14px var(--f-mono)}.act .ic.tb i{font-style:normal;font-family:inherit;font-size:9.5px;font-weight:500;opacity:.85}
+ .th-leg .ic.tb,.th-sym .ic.tb{width:38px;height:34px;display:inline-grid;place-items:center;align-content:center;border-radius:7px;background:rgba(46,196,182,.14);color:var(--teal);line-height:1}
+ .th-leg .ic.tb b,.th-sym .ic.tb b{font:700 14px var(--f-mono)}.th-leg .ic.tb i,.th-sym .ic.tb i{font-style:normal;font-size:9.5px}
+ .th-leg{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);padding:6px 8px;margin-bottom:6px;border-radius:10px;background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.12)}
+ .th-leg>span:nth-child(2){flex:1;line-height:1.4}
+ .th-i{flex:none;width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.06);color:#fff;font-size:16px;cursor:pointer;display:grid;place-items:center;padding:0}
+ .th-i.sm{width:26px;height:26px;font-size:14px}.th-i:hover{background:rgba(46,196,182,.25)}
+ .th-tlh{font-size:11.5px;color:var(--muted);margin:6px 0 -2px}
+ .th-list{display:grid;gap:8px}
+ .th-row{display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:start;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07)}
+ .th-row b{font-size:14px}.th-row p{margin:2px 0 0;font-size:13px;line-height:1.55;color:#c4d2e1}
+ .th-sym{display:flex;align-items:center;flex-wrap:wrap;min-height:34px;font-size:13px}
+ .th-clk{font:700 20px var(--f-mono);padding:2px 10px;border-radius:8px}.th-clk.red{color:var(--red);border:1px solid var(--red);background:rgba(239,75,83,.08)}.th-clk.gold{color:var(--gold);border:1px solid var(--gold);background:rgba(245,190,70,.08)}
+ .th-ul{margin:0;padding-left:18px;display:grid;gap:6px;font-size:13.5px;line-height:1.55}
+ .th-tb{width:100%;border-collapse:collapse;font-size:12.5px}.th-tb th,.th-tb td{border:1px solid rgba(255,255,255,.12);padding:5px 7px;text-align:left;vertical-align:top}.th-tb th{background:rgba(255,255,255,.06)}.th-tb td:nth-child(2){text-align:center;font-family:var(--f-mono);color:var(--gold)}
+ .th-p{font-size:13px;line-height:1.6;margin:8px 0 0}
+ @media (max-width:599px){.th-row{grid-template-columns:1fr;gap:4px}}`; document.head.appendChild(st); }
+
+/* ---------- larger vital-sign numbers on phones ---------- */
+{ const st=document.createElement('style'); st.textContent=`
+ @media (max-width:599px) and (orientation:portrait){
+  #vitHud{padding:5px 6px!important}
+  #vitHud .vh-row{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:4px!important}
+  #vitHud .vh{padding:3px 7px 4px!important;display:flex!important;align-items:baseline;gap:6px}
+  #vitHud .vh .vl{font-size:11.5px!important;font-weight:600;min-width:30px}
+  #vitHud .vh .vv{font-size:24px!important;line-height:1.1}
+  #vitHud .vh[data-k=bp] .vv{font-size:20px!important}
+  #vitHud .vh .va{font-size:10px!important}
+ }
+ @media (max-height:500px) and (orientation:landscape){
+  #vitHud .vh .vv{font-size:20px!important}#vitHud .vh[data-k=bp] .vv{font-size:17px!important}#vitHud .vh .vl{font-size:10.5px!important}
+  body.vhTop #vitHud .vh-row{grid-template-columns:1fr 1.05fr .95fr 1.7fr 1.3fr .7fr!important}
+  body.vhTop #vitHud .vh{min-width:0;overflow:hidden}
+  body.vhTop #vitHud .vh[data-k=loc] .vl{font-size:8.5px!important}
+  body.vhTop #vitHud .vh{display:flex!important;align-items:baseline;gap:4px;padding:1px 5px 2px!important}
+  body.vhTop #vitHud .vh .vl{font-size:9.5px!important}
+  body.vhTop #vitHud .vh .vv{font-size:19px!important;line-height:1.15}
+  body.vhTop #vitHud .vh[data-k=bp] .vv{font-size:17px!important;letter-spacing:-.02em}
+ }`; document.head.appendChild(st); }
 </script>
 
 </body>
