@@ -5743,6 +5743,133 @@ function preCaseVit(cs,d){ const b=PRE_BASE(cs.p), v=Object.assign({},cs.v,b,{o2
  }`; document.head.appendChild(st); })();
 
 if(window.__ert) window.__ert.pre={PRE_CASE,genPre,preCaseVit};
+
+/* ================================================================
+   REALISM PACK 1 — bedside monitor v2 · beat-synced tones · alarm priority tones ·
+   ward soundscape · breathing pattern (chest and Resp trace move together)
+   1) Monitor is sampled every 4 ms (not once per frame) so every QRS is drawn,
+      rhythm follows the case (sinus / SVT / brady / AF / ST elevation),
+      pleth size follows perfusion, alarm header names the parameter.
+   2) Pulse-ox tone fires on each drawn beat (irregular in AF), pitch falls with SpO₂.
+   3) High-priority alarm uses a 3+2 pulse burst (IEC 60601-1-8 style) every 8 s,
+      silenced once the ERT team is at the bedside (visual alarm continues).
+   4) Quiet ward background: ventilation hum, distant call bell, infusion pump, footsteps.
+   5) Breathing: inspiration 1/3, expiration 2/3; shallow when fast, deep when slow.
+   ================================================================ */
+const RHY_CASE={AC3:'svt',A7:'brady',A5:'af',AN5:'af',AC1:'stemi'};
+function rhythmFor(){ const cs=C&&C.cs, v=GS.vit||{}, hr=+v.hr||80; const r=cs&&RHY_CASE[cs.id];
+  if(r==='svt') return hr>=150?'svt':'sinus'; if(r==='af') return 'af'; if(r==='stemi') return 'stemi'; return 'sinus'; }
+const MON2={T:null,x:0,last:{},next:0,beats:[],t:0,live:0,case:null,hx:0,hlast:null,vline:-1};
+const BRTH={phase:0,cur:0};
+function g2(x,m,s,a){ return a*Math.exp(-((x-m)*(x-m))/(2*s*s)); }
+function ecgBeat(d,rh,rr){ // d = seconds from R peak
+  if(d<-.35||d>.9) return 0; const sq=Math.sqrt(Math.min(1.3,rr)); let y=0;
+  if(rh!=='svt'&&rh!=='af') y+=g2(d,-.15*Math.min(1,sq),.024,.13);
+  y+=g2(d,-.016,.008,-.1)+g2(d,0,.011,1)+g2(d,.02,.01,-.26);
+  if(rh==='stemi') y+=g2(d,.11,.065,.32);           // ST segment lifted into a tall T
+  y+=g2(d,.16+.14*sq,.045,rh==='stemi'?.22:.28);
+  return y; }
+function plethBeat(d){ d-=.2; if(d<-.05||d>1.1) return 0;
+  const up=d<.12?Math.exp(-((d-.12)**2)/(2*.045*.045)):Math.exp(-((d-.12)**2)/(2*.15*.15));
+  return up+g2(d,.34,.035,.16); }
+function breathVal(p,rr){ const If=rr>24?.42:1/3; const v=p<If?(1-Math.cos(Math.PI*p/If))/2:Math.exp(-(p-If)/(.2*(1-If)));
+  const depth=rr>28?.55:rr>22?.8:rr<=10?1.45:1; return v*depth; }
+function qrsTone(){ if(!GS.sound||!GS.measured.has('hr')) return; const v=GS.vit||{};
+  beep(GS.measured.has('spo2')?560+((+v.spo2||97)-80)*14:880,.06,.025);
+  const d=document.querySelector('#vitHud .vh-dot'); if(d){ d.style.animation='none'; d.style.opacity=1; clearTimeout(d._t); d._t=setTimeout(()=>{ d.style.opacity=.35; },120); } }
+function alarmTexts(v,on,sev){ const a=[];
+  if(on('hr')&&sev('hr')) a.push(`HR ${v.hr>=100?'HIGH':'LOW'} ${v.hr}`);
+  if(on('spo2')&&sev('spo2')) a.push(`SpO2 LOW ${v.spo2}`);
+  if(on('rr')&&sev('rr')) a.push(`RR ${v.rr>20?'HIGH':'LOW'} ${v.rr}`);
+  if(on('bp')&&sev('sbp')) a.push(`NIBP SYS ${v.sbp>=180?'HIGH':'LOW'} ${v.sbp}`);
+  return a; }
+drawMonitor=function(T){
+  const c=W3.monCtx, w=640, h=420, gs=window.GS||{}; const v=gs.vit||{}, ms=gs.measured||new Set(); const on=k=>ms.has(k);
+  const sev=gs.critCheck||(()=>false);
+  if(MON2.case!==gs.caseId||MON2.T==null){ c.fillStyle='#03090b'; c.fillRect(0,0,w,h); Object.assign(MON2,{case:gs.caseId,T,x:0,last:{},next:T+.3,beats:[],t:T,hx:0,hlast:null,vline:-1}); }
+  const hud=document.getElementById('vhEcg'), hc=hud&&hud.getContext('2d');
+  // ---- traces: advance simulated time in 4 ms sub-steps ----
+  const hr=Math.max(20,+v.hr||80), rr=Math.max(4,+v.rr||16), rh=rhythmFor();
+  const perf=Math.max(.2,Math.min(1,((+v.sbp||120)-55)/55));
+  const PX=125, HPX=48; let t=MON2.t; if(T-t>.25) t=T-.25; const end=T; if(MON2.next<t-1.5) MON2.next=t;   // slow devices: draw only the latest 0.25 s
+  const Y={ecg:105,pl:244,rs:318};
+  while(t<end){ const dt=Math.min(.004,end-t); t+=dt;
+    while(MON2.next<=t){ MON2.beats.push(MON2.next); if(MON2.beats.length>8) MON2.beats.shift(); const base=60/hr; MON2.next+=rh==='af'?base*(.65+Math.random()*.7):base; qrsTone(); }
+    BRTH.phase=(BRTH.phase+dt*rr/60)%1; BRTH.cur=breathVal(BRTH.phase,rr);
+    let e=0, pl=0; for(const b of MON2.beats){ e+=ecgBeat(t-b,rh,60/hr); pl+=plethBeat(t-b); }
+    if(rh==='af') e+=.045*Math.sin(t*37)+.03*Math.sin(t*53+1)+.02*Math.sin(t*71);
+    const vals=[[Y.ecg-e*52,on('hr'),'#41f07a'],[Y.pl-Math.min(1.25,pl)*62*perf,on('spo2'),'#45d6ff'],[Y.rs-BRTH.cur*34,on('rr'),'#ffd84a']];
+    const x0=MON2.x, x1=x0+dt*PX;
+    // erase bar + faint grid ahead of the sweep
+    c.fillStyle='#03090b'; c.fillRect(x1,36,10,296);
+    const gx=Math.floor(x1/25); if(gx!==MON2.vline){ MON2.vline=gx; c.fillStyle='#0c1f1b'; c.fillRect(gx*25+25,36,1,296); }
+    c.fillStyle='#0c1f1b'; for(let gy=61;gy<330;gy+=25) c.fillRect(x1,gy,10,1);
+    vals.forEach(([y,live,col],i)=>{ const yy=live?y:[Y.ecg,Y.pl,Y.rs][i]; const ly=MONS.last[i]!=null?MONS.last[i]:yy;
+      c.strokeStyle=live?col:'#3a4a4f'; c.lineWidth=2.2; c.beginPath(); c.moveTo(x0,ly); c.lineTo(x1,yy); c.stroke(); MONS.last[i]=yy; });
+    MON2.x=x1; if(MON2.x>412){ MON2.x=0; MONS.last={}; MON2.vline=-1; }
+    if(hc){ const H=hud.height, hx0=MON2.hx, hx1=hx0+dt*HPX*(hud.width/160); const yy=on('hr')?H*.62-e*H*.42:H*.62;
+      hc.fillStyle='#06111e'; hc.fillRect(hx1,0,6,H); hc.strokeStyle=on('hr')?'#41f07a':'#2c3b40'; hc.lineWidth=1.6; hc.beginPath(); hc.moveTo(hx0,MON2.hlast??yy); hc.lineTo(hx1,yy); hc.stroke();
+      MON2.hlast=yy; MON2.hx=hx1; if(MON2.hx>hud.width){ MON2.hx=0; MON2.hlast=null; } }
+  }
+  MON2.t=t; MON2.live=performance.now();
+  // ---- header: bed + name, or the alarm message (cycles when several) ----
+  const blink=Math.sin(T*8)>0; const al=gs.alarm?alarmTexts(v,on,sev):[];
+  c.fillStyle=al.length?(blink?'#c4161f':'#5a0d12'):'#0b1a20'; c.fillRect(0,0,w,34);
+  c.font='600 18px "IBM Plex Mono",monospace'; c.textAlign='left';
+  if(al.length){ c.fillStyle='#fff'; c.fillText('!!! '+al[Math.floor(T/1.6)%al.length],12,23); }
+  else { c.fillStyle='#9fe7ff'; c.fillText((gs.bedLabel||'BED 1')+'  ·  '+(gs.ptName||''),12,23); }
+  c.textAlign='right'; c.fillStyle=al.length?'#fff':'#7fa'; c.fillText(new Date().toTimeString().slice(0,5),w-12,23);
+  // ---- numerics (unchanged layout) ----
+  c.fillStyle='#03090b'; c.fillRect(420,36,220,h-36); c.fillRect(0,332,420,88);
+  c.textAlign='left'; c.font='600 14px "IBM Plex Mono",monospace';
+  c.fillStyle='#41f07a'; c.fillText('II  x1',6,52); c.fillStyle='#45d6ff'; c.fillText('Pleth',6,180); c.fillStyle='#ffd84a'; c.fillText('Resp',6,272);
+  const box=(x,y,lab,val,col,crit,unit)=>{ c.fillStyle=crit&&blink?'#ff3b47':col; c.font='600 15px "IBM Plex Mono",monospace'; c.textAlign='left'; c.fillText(lab,x,y); c.font='600 46px "IBM Plex Mono",monospace'; c.textAlign='right'; c.fillText(val,x+200,y+46); c.font='13px "IBM Plex Mono",monospace'; c.fillText(unit||'',x+200,y+62); };
+  box(428,58,'HR',on('hr')?v.hr:'--','#41f07a',on('hr')&&sev('hr'),'bpm');
+  box(428,138,'SpO2',on('spo2')?v.spo2:'--','#45d6ff',on('spo2')&&sev('spo2'),on('spo2')&&v.o2L?`O₂ ${v.o2L} L`:'%');
+  box(428,218,'RR',on('rr')?v.rr:'--','#ffd84a',on('rr')&&sev('rr'),'/min');
+  box(428,298,'Temp',on('temp')&&v.temp!=null?(+v.temp).toFixed(1):'--','#f2f2f2',false,'°C');
+  c.fillStyle=on('bp')&&sev('sbp')&&blink?'#ff3b47':'#ff8ad8'; c.font='600 15px "IBM Plex Mono",monospace'; c.textAlign='left'; c.fillText('NIBP',8,352);
+  c.font='600 40px "IBM Plex Mono",monospace'; c.fillText(on('bp')?`${v.sbp}/${v.dbp}`:'---/--',8,398);
+  if(on('bp')){ c.font='13px "IBM Plex Mono",monospace'; c.fillStyle='#ff8ad8'; c.fillText(`(${Math.round(((+v.sbp)+2*(+v.dbp||0))/3)})  mmHg`,250,398); }
+};
+// heartbeat: when the 3D monitor is running it fires the tone on each drawn beat; otherwise keep a steady tone (no random alarm chirps)
+heartbeat=function(){ clearTimeout(hbTimer); if(performance.now()-MON2.live<400){ hbTimer=setTimeout(heartbeat,500); return; }
+  const v=GS.vit; if(GS.measured.has('hr')&&v.hr&&$('#scr-game')&&!$('#scr-game').hidden){ beep(GS.measured.has('spo2')?560+(v.spo2-80)*14:880,.06,.025); hbTimer=setTimeout(heartbeat,60000/v.hr); } else hbTimer=setTimeout(heartbeat,800); };
+// high-priority alarm burst: 3 + 2 pulses, repeat every 8 s while active, team silences on arrival
+const ALM={next:0};
+function alarmBurst(){ const a=ac(); if(!a) return; try{ a.resume&&a.resume(); }catch(e){}
+  [0,.18,.36,.72,.9].forEach(off=>{ const t=a.currentTime+off; [988,1976,2964].forEach((f,i)=>{ const o=a.createOscillator(), g=a.createGain(); o.type='triangle'; o.frequency.value=f;
+    const pk=[.045,.014,.007][i]; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(pk,t+.015); g.gain.setValueAtTime(pk,t+.11); g.gain.linearRampToValueAtTime(0,t+.14); o.connect(g).connect(a.destination); o.start(t); o.stop(t+.16); }); }); }
+setInterval(()=>{ const inWard=$('#scr-game')&&!$('#scr-game').hidden; if(!GS.sound||!inWard||!GS.alarm||(C&&C.arrived)){ ALM.next=0; return; }
+  const now=performance.now(); if(now>=ALM.next){ alarmBurst(); ALM.next=now+8000; } },250);
+// quiet ward background
+const AMB={on:false,nodes:null,ev:0};
+function ambStart(){ const a=ac(); if(!a||AMB.nodes) return; try{ a.resume&&a.resume(); }catch(e){}
+  const len=a.sampleRate*3, buf=a.createBuffer(1,len,a.sampleRate), d=buf.getChannelData(0); let last=0; for(let i=0;i<len;i++){ last=(last+.02*(Math.random()*2-1))/1.02; d[i]=last*3.2; }
+  const src=a.createBufferSource(); src.buffer=buf; src.loop=true; const lp=a.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=260; const g=a.createGain(); g.gain.value=0;
+  src.connect(lp).connect(g).connect(a.destination); src.start(); g.gain.linearRampToValueAtTime(.05,a.currentTime+1.5); AMB.nodes={src,g}; AMB.ev=performance.now()+9000; }
+function ambStop(){ const a=ac(); if(!AMB.nodes||!a) return; const {src,g}=AMB.nodes; AMB.nodes=null; try{ g.gain.cancelScheduledValues(a.currentTime); g.gain.linearRampToValueAtTime(0,a.currentTime+.6); src.stop(a.currentTime+.7); }catch(e){} }
+function ambTone(f,d,v,when,type='sine',lp=1800){ const a=ac(); if(!a) return; const t=a.currentTime+when; const o=a.createOscillator(), f1=a.createBiquadFilter(), g=a.createGain(); o.type=type; o.frequency.value=f; f1.type='lowpass'; f1.frequency.value=lp;
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(v,t+.02); g.gain.exponentialRampToValueAtTime(.0001,t+d); o.connect(f1).connect(g).connect(a.destination); o.start(t); o.stop(t+d+.05); }
+function ambStep(when,v){ const a=ac(); if(!a) return; const t=a.currentTime+when, n=a.sampleRate*.06, b=a.createBuffer(1,n,a.sampleRate), d=b.getChannelData(0); for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/(a.sampleRate*.012));
+  const s=a.createBufferSource(); s.buffer=b; const f=a.createBiquadFilter(); f.type='lowpass'; f.frequency.value=700; const g=a.createGain(); g.gain.value=v; s.connect(f).connect(g).connect(a.destination); s.start(t); }
+function ambEvent(){ const k=Math.random();
+  if(k<.35){ [0,.55,1.1].forEach(w=>{ ambTone(784,.45,.012,w,'triangle',1400); ambTone(659,.45,.012,w+.25,'triangle',1400); }); }        // distant nurse-call chime
+  else if(k<.65){ [0,.16,.32].forEach(w=>ambTone(2400,.08,.006,w,'square',3200)); }                                                   // infusion pump next door
+  else { const n=6+Math.floor(Math.random()*5), s=.42+Math.random()*.1; for(let i=0;i<n;i++){ const fade=Math.sin(Math.PI*(i+.5)/n); ambStep(i*s,.05*fade); } } }  // footsteps in the corridor
+setInterval(()=>{ const want=GS.sound&&$('#scr-game')&&!$('#scr-game').hidden; if(want&&!AMB.nodes) ambStart(); else if(!want&&AMB.nodes) ambStop();
+  if(AMB.nodes&&performance.now()>AMB.ev){ AMB.ev=performance.now()+18000+Math.random()*30000; ambEvent(); } },1000);
+// chest follows the breathing pattern (skipped while bag-valve ventilation or seizure animates the chest)
+onFrame(()=>{ if(!W3.pt||W3.mode!=='ward'||!C) return; if(W3.bvm&&W3.bvmOn) return; if(W3.ptLook&&W3.ptLook.seize&&!GS.seizeStopped) return;
+  const P=W3.pt.userData.parts; if(!P||!P.torso) return; const s=ptState(); const dysp=s?s.dysp:0;
+  P.torso.scale.z=.64*(1+BRTH.cur*(.032+dysp*.04)); });
+// small live ECG strip in the vitals bar (useful on phones where the 3D monitor is small)
+{ const add=()=>{ const head=document.querySelector('#vitHud .vh-head'); if(!head||document.getElementById('vhEcg')) return;
+    const cv=document.createElement('canvas'); cv.id='vhEcg'; cv.width=320; cv.height=44; cv.setAttribute('aria-hidden','true'); head.appendChild(cv); };
+  const _sh=show; show=function(id){ _sh(id); if(id==='scr-game') setTimeout(add,50); };
+  const st=document.createElement('style'); st.textContent=`#vhEcg{margin-left:auto;width:160px;height:22px;border-radius:6px;background:#06111e;flex:none}
+  @media (max-width:599px){#vhEcg{width:110px}}`; document.head.appendChild(st); }
+if(window.__ert) window.__ert.realism={MON2,BRTH,rhythmFor,alarmBurst,ambEvent};
 </script>
 
 </body>
