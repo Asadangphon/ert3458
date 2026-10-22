@@ -1305,7 +1305,7 @@ function setupPatient(cs){
   W3.bed.visible=!neo; W3.bassinet.visible=neo;
   const seed=[...cs.id].reduce((a,c)=>a+c.charCodeAt(0),0);
   const o={gender:p.sex,gown:true,gownMat:getGown(),skin:SKIN[seed%3],hairColor:p.ageYears>65?'#B7B4AE':HAIRC[seed%2],hairStyle:neo||infant?'none':(p.sex==='F'?(p.ageYears<12?'ponytail':'bob'):(p.ageYears<12?'crew':'short')),body:'avg',height:170,acc:new Set()};
-  const pt=buildPerson(o);
+  const pt=buildPatient(o,cs);   // adapter: GLB patient when a matching asset exists, else the procedural body
   const holder=new THREE.Group(); holder.add(pt); pt.rotation.x=-Math.PI/2;
   let sc=1; if(neo)sc=.28; else if(infant)sc=.4; else if(p.ageYears<4)sc=.58; else if(p.ageYears<10)sc=.74; else if(p.ageYears<15)sc=.92;
   pt.scale.setScalar(sc);
@@ -5945,6 +5945,108 @@ function addClockInfo(){ const ck=$('#cpBody .clock'); if(!ck||ck.querySelector(
  .th-tb{width:100%;border-collapse:collapse;font-size:12.5px}.th-tb th,.th-tb td{border:1px solid rgba(255,255,255,.12);padding:5px 7px;text-align:left;vertical-align:top}.th-tb th{background:rgba(255,255,255,.06)}.th-tb td:nth-child(2){text-align:center;font-family:var(--f-mono);color:var(--gold)}
  .th-p{font-size:13px;line-height:1.6;margin:8px 0 0}
  @media (max-width:599px){.th-row{grid-template-columns:1fr;gap:4px}}`; document.head.appendChild(st); }
+
+/* ================================================================
+   PATIENT RIG ADAPTER — lets a skinned GLB patient stand in for the procedural body
+   without touching the clinical code. Every caller keeps using the procedural contract:
+     pt.children[0]                 body group (sit-up rotation)
+     pt.userData.parts.head/torso/armL/armR/legL/legR   rotation (+ torso.scale) and .add(prop)
+     parts.armL/armR.userData.el    elbow socket (IV, restraint, chest-pain pose)
+     parts.eyes[]                   scale.y 1 = open … 0.1 = closed
+     pt.userData.skin               .color .roughness .clearcoat (pallor, cyanosis, sweat)
+     pt.userData.base.skin          reference skin colour
+   Each part is a "socket" Object3D parented to the matching bone with a body-aligned frame
+   (‑y along the limb, z forward) and unit world scale, so props keep their old offsets.
+   Its rotation/scale are read every frame and applied to the bone as  bind · L·q·L⁻¹.
+   Asset keys in models/manifest.json (first match wins, else procedural):
+     patient_m · patient_f · patient_elderly_m · patient_elderly_f · patient_ob
+     patient_teen · patient_child · patient_infant · patient_neonate
+   ?ptglb=test uses the nurse models as a stand-in for adult cases (adapter test only).
+   ================================================================ */
+var PTRIG={test:/[?&#]ptglb=test\b/.test(location.search+location.hash),last:null};
+function patientKeys(cs){ const p=cs.p, pop=critPop(p), g=p.sex==='F'?'f':'m';
+  if(pop==='neo') return ['patient_neonate']; if(p.ageYears<1) return ['patient_infant'];
+  if(p.ageYears<15) return p.ageYears>=10?['patient_teen','patient_child']:['patient_child'];
+  if(p.pregnant&&(p.ga||0)>=20) return ['patient_ob'];
+  return p.ageYears>=65?[`patient_elderly_${g}`,`patient_${g}`]:[`patient_${g}`]; }
+function patientTpl(cs){ for(const k of patientKeys(cs)) if(GLB.tpl[k]) return {k,tpl:GLB.tpl[k],test:false};
+  const p=cs.p; if(PTRIG.test&&p.ageYears>=15&&!(p.pregnant&&(p.ga||0)>=20)){ const k=p.sex==='F'?'nurse_f':'nurse_m'; if(GLB.tpl[k]) return {k,tpl:GLB.tpl[k],test:true}; }
+  return null; }
+function buildPatient(o,cs){
+  const t=cs&&G3.ok&&SkelUtils?patientTpl(cs):null;
+  if(t){ try{ const pt=buildPatientRig(t.tpl,o,t); if(pt){ PTRIG.last={kind:'glb',key:t.k,test:t.test,caps:pt.userData.rig.caps,case:cs.id}; return pt; } }
+    catch(e){ console.warn('patient rig',e); } }
+  PTRIG.last={kind:'procedural',key:null,case:cs&&cs.id,wanted:cs?patientKeys(cs):[]};
+  return buildPerson(o); }
+function buildPatientRig(gltf,o,t){
+  const inst=instGLB(gltf,Object.assign({},o,{scrub:t.test?'#7FA9C4':(o.scrub||'#9DBFD3'),acc:new Set(),height:o.height||168,hairStyle:o.hairStyle==='bob'?'bob':'short'}));
+  if(inst.userData.mixer){ inst.userData.mixer.stopAllAction(); }
+  const model=inst.children[0]; inst.remove(model);
+  const pt=new THREE.Group(), body=new THREE.Group(); pt.add(body); body.add(model); pt.updateMatrixWorld(true);
+  const B=bonesOf(model), need=['hips','spine2','neck','head','leftarm','leftforearm','lefthand','rightarm','rightforearm','righthand','leftupleg','leftleg','leftfoot','rightupleg','rightleg','rightfoot'];
+  const miss=need.filter(k=>!B[k]); if(miss.length){ console.warn('patient rig: missing bones',miss); return null; }
+  const V=()=>new THREE.Vector3(), Q=()=>new THREE.Quaternion();
+  const wp=b=>b.getWorldPosition(V()), wq=b=>b.getWorldQuaternion(Q());
+  // body side: the procedural "L" parts sit on −x
+  const sideOf=k=>wp(B[k]).x<0?'L':'R';
+  const A={}; for(const s of ['left','right']){ const S=sideOf(s+'arm'); A['arm'+S]=s+'arm'; A['el'+S]=s+'forearm'; A['hand'+S]=s+'hand'; A['leg'+S]=s+'upleg'; A['knee'+S]=s+'leg'; A['foot'+S]=s+'foot'; }
+  // rest pose for lying: arms beside the body, forearms straight, legs straight
+  const aim=(bk,tk,dir)=>{ const b=B[bk], cur=wp(B[tk]).sub(wp(b)).normalize(); const q=Q().setFromUnitVectors(cur,dir.clone().normalize());
+    const nw=q.multiply(wq(b)); const pq=b.parent.getWorldQuaternion(Q()); b.quaternion.copy(pq.invert().multiply(nw)); pt.updateMatrixWorld(true); };
+  for(const S of ['L','R']){ const sx=S==='L'?-1:1;
+    aim(A['arm'+S],A['el'+S],new THREE.Vector3(sx*.16,-1,.03)); aim(A['el'+S],A['hand'+S],new THREE.Vector3(sx*.1,-1,.12));
+    aim(A['leg'+S],A['knee'+S],new THREE.Vector3(sx*.03,-1,0)); aim(A['knee'+S],A['foot'+S],new THREE.Vector3(sx*.02,-1,-.02)); }
+  const H=(o.height||168)/100;
+  const socks=[];
+  const sock=(bk,dir,worldPos,base)=>{ const b=B[bk]; const bw=wq(b), bs=b.getWorldScale(V()), bp=wp(b);
+    let S=Q(); if(dir){ const y=dir.clone().normalize().negate(), z=new THREE.Vector3(0,0,1); const x=V().crossVectors(y,z).normalize(); z.crossVectors(x,y).normalize(); S.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x,y,z)); }
+    const L=bw.clone().invert().multiply(S);
+    const pos=(worldPos||bp).clone(); const lp=b.worldToLocal(pos.clone());
+    const sc=1/((bs.x+bs.y+bs.z)/3);
+    const so=new THREE.Object3D(); so.name='socket_'+bk; so.matrixAutoUpdate=false; so.matrix.compose(lp,L,new THREE.Vector3(sc,sc,sc)); b.add(so);
+    if(base) so.scale.copy(base);
+    const rec={so,b,bind:b.quaternion.clone(),L,Li:L.clone().invert(),base:(base||new THREE.Vector3(1,1,1)).clone(),bindS:b.scale.clone()}; socks.push(rec); return so; };
+  const dirOf=(a,bk)=>wp(B[bk]).sub(wp(B[a]));
+  const parts={};
+  const hp=wp(B.head).add(new THREE.Vector3(0,.075*H,.012*H));
+  parts.head=sock('head',null,hp);
+  const chest=wp(B.spine2).add(new THREE.Vector3(0,.02*H,0));
+  parts.torso=sock('spine2',null,chest,new THREE.Vector3(1.04,1,.64));
+  for(const S of ['L','R']){
+    parts['arm'+S]=sock(A['arm'+S],dirOf(A['arm'+S],A['el'+S]));
+    const el=sock(A['el'+S],dirOf(A['el'+S],A['hand'+S])); parts['arm'+S].userData.el=el;
+    parts['leg'+S]=sock(A['leg'+S],dirOf(A['leg'+S],A['knee'+S])); }
+  // eyelids: ARKit / generic blink morphs when the asset has them
+  const blink=[]; model.traverse(m=>{ const d=m.morphTargetDictionary; if(!d) return; for(const [n,i] of Object.entries(d)) if(/eye.?blink|eyes?.?closed?|blink/i.test(n)) blink.push([m,i]); });
+  parts.eyes=[new THREE.Object3D(),new THREE.Object3D()]; parts.mouth=new THREE.Object3D();
+  // skin proxy → real material (texture tint stays, colour shifts relative to the reference)
+  const skinMats=[]; model.traverse(m=>{ if(!m.isMesh) return; (Array.isArray(m.material)?m.material:[m.material]).forEach(mt=>{ if(/skin/i.test(mt.name||'')&&!skinMats.includes(mt)) skinMats.push(mt); }); });
+  const ref=new THREE.Color(o.skin||SKIN[1]);
+  const proxy={color:ref.clone(),roughness:.58,clearcoat:0,clearcoatRoughness:.25};
+  const tint0=skinMats.map(m=>m.color.clone());
+  const caps={eyelids:blink.length>0,skin:skinMats.length>0,bones:true,morphs:blink.length};
+  pt.userData={parts,skin:proxy,base:{skin:ref.clone()},rig:{socks,blink,skinMats,tint0,ref,caps,B,neck:B.neck}};
+  return pt; }
+function syncPatientRig(){ const pt=W3.pt; const R=pt&&pt.userData.rig; if(!R) return;
+  const q=new THREE.Quaternion();
+  for(const s of R.socks){ q.setFromEuler(s.so.rotation); s.b.quaternion.copy(s.bind).multiply(s.L.clone().multiply(q).multiply(s.Li));
+    const r=s.so.scale, bs=s.base; if(r.x!==bs.x||r.y!==bs.y||r.z!==bs.z){ // breathing: scale along socket axes, mapped into bone axes
+      const f=new THREE.Vector3(r.x/bs.x,r.y/bs.y,r.z/bs.z), out=new THREE.Vector3(1,1,1);
+      [[1,0,0],[0,1,0],[0,0,1]].forEach((ax,i)=>{ const v=new THREE.Vector3(...ax).applyQuaternion(s.L); const a=[Math.abs(v.x),Math.abs(v.y),Math.abs(v.z)]; const j=a.indexOf(Math.max(...a)); out.setComponent(j,f.getComponent(i)); });
+      s.b.scale.set(s.bindS.x*out.x,s.bindS.y*out.y,s.bindS.z*out.z);
+      if(s.b===R.B.spine2&&R.neck) R.neck.scale.set(1/out.x,1/out.y,1/out.z); } }
+  const open=Math.max(0,Math.min(1,(pt.userData.parts.eyes[0].scale.y-.1)/.9));
+  for(const [m,i] of R.blink) m.morphTargetInfluences[i]=1-open;
+  const c=pt.userData.skin.color;
+  R.skinMats.forEach((mt,i)=>{ const t=R.tint0[i]; mt.color.setRGB(t.r*c.r/Math.max(.02,R.ref.r),t.g*c.g/Math.max(.02,R.ref.g),t.b*c.b/Math.max(.02,R.ref.b));
+    mt.roughness=pt.userData.skin.roughness; if('clearcoat' in mt){ mt.clearcoat=pt.userData.skin.clearcoat; mt.clearcoatRoughness=pt.userData.skin.clearcoatRoughness; } }); }
+onFrame(()=>{ try{ syncPatientRig(); }catch(e){} });
+// patient assets may finish loading after the lobby/brief patient is built: rebuild while nothing clinical has happened yet
+{ const _lm=loadManifest; loadManifest=async function(){ const r=await _lm.apply(this,arguments);
+    try{ const cs=C&&C.cs?C.cs:(W3.lobbyPt?(CASES.find(c=>c.id==='A1')||CASES[0]):null);
+      if(cs&&W3.pt&&!W3.pt.userData.rig&&patientTpl(cs)&&(!C||['brief','tool'].includes(C.phase))) setupPatient(cs); }catch(e){ console.warn('patient rebuild',e); }
+    return r; }; }
+if(window.__ert) window.__ert.ptRig=PTRIG;
 
 /* ---------- larger vital-sign numbers on phones ---------- */
 { const st=document.createElement('style'); st.textContent=`
