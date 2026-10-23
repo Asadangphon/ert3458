@@ -6033,6 +6033,7 @@ function buildPatientRig(gltf,o,t){
     parts['arm'+S]=sock(A['arm'+S],dirOf(A['arm'+S],A['el'+S]));
     const el=sock(A['el'+S],dirOf(A['el'+S],A['hand'+S])); parts['arm'+S].userData.el=el;
     const fk=A['hand'+S].replace('hand','handmiddle1'); const hs=sock(A['hand'+S],B[fk]?dirOf(A['hand'+S],fk):dirOf(A['el'+S],A['hand'+S])); parts['arm'+S].userData.hand=hs;
+    const i3=A['hand'+S].replace('hand','handindex3'), i2=A['hand'+S].replace('hand','handindex2'); if(B[i3]&&B[i2]) parts['arm'+S].userData.finger=sock(i3,dirOf(i2,i3));
     parts['leg'+S]=sock(A['leg'+S],dirOf(A['leg'+S],A['knee'+S])); }
   // eyelids: when the asset has no blink morphs, a skin-coloured lid shell per eyeball (fitted from the Eyes mesh) slides down over the eye
   const lids=[]; let eyeMesh=null; model.traverse(m=>{ if(m.isMesh&&/^eyes?$/i.test((Array.isArray(m.material)?m.material[0]:m.material).name||'')) eyeMesh=m; });
@@ -6110,7 +6111,7 @@ function snapToBody(obj){ const pt=W3.pt; if(!pt||!pt.userData.rig) return false
     const arm=W3.pt.userData.parts.armR, hs=arm.userData.hand, el=arm.userData.el;
     const pr=new THREE.Group(); const clip=mesh(new RoundedBoxGeometry(.024,.034,.022,2,.006),M('#3a4148',{roughness:.45}),0,0,0,false); pr.add(clip);
     const glow=mesh(new THREE.SphereGeometry(.004,8,6),new THREE.MeshBasicMaterial({color:'#ff2a2a'}),0,-.006,.012,false); pr.add(glow);
-    if(hs){ pr.position.set(0,-.085,.006); hs.add(pr); } else if(el){ pr.position.set(0,-.31,.01); el.add(pr); }
+    const fg=arm.userData.finger; if(fg){ pr.position.set(0,-.006,0); fg.add(pr); } else if(hs){ pr.position.set(0,-.085,.006); hs.add(pr); } else if(el){ pr.position.set(0,-.31,.01); el.add(pr); }
     FX.spo2probe=pr; try{ const mon=W3.mon.getWorldPosition(V3()).add(V3(0,1.1,0)); tubeBetween(pr.getWorldPosition(V3()),mon,'#2b2f33',.004,.3); }catch(e){} }; }
 if(window.__ert) window.__ert.ptRig=PTRIG;
 
