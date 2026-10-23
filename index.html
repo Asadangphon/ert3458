@@ -1508,6 +1508,7 @@ function instGLB(gltf,o){
   model.scale.multiplyScalar(s); model.position.y-=box.min.y*s;
   const BW={slim:.93,avg:1,sturdy:1.12}[o.body||'avg']; model.scale.x*=BW; model.scale.z*=BW;
   try{ glbDress(model,o); }catch(e){ console.warn('glbDress',e); }
+  try{ realEyes(model,root,o.skin); }catch(e){ console.warn('realEyes',e); }
   const mixer=new THREE.AnimationMixer(model); const clip=re=>gltf.animations.find(a=>re.test(a.name));
   const idle=clip(/idle/i)?mixer.clipAction(clip(/idle/i)):null, walk=clip(/walk/i)?mixer.clipAction(clip(/walk/i)):null;
   idle&&idle.play();
@@ -1599,10 +1600,10 @@ function glbDress(model,o){
     const brow=new THREE.MeshStandardMaterial({color:new THREE.Color(o.hairColor||HAIRC[0]).multiplyScalar(.8),roughness:.8});
     const glint=new THREE.MeshBasicMaterial({color:'#ffffff'}); const er=FE.eyeR||.0158*F.eyeS, EY=FE.eyeY;
     for(const sx of [-1,1]){ const ex=sx*FE.eyeX, ez=FE.eyeC??F.eyeZ;
-      const e=mesh(new THREE.SphereGeometry(er,20,16),eyeW,ex,EY,ez,false); e.scale.set(1,.8,.62); face.add(e);
-      const ir=mesh(new THREE.SphereGeometry(er*.6,16,12),iris,ex,EY,ez+er*.42,false); ir.scale.set(1,1.05,.42); face.add(ir);
-      face.add(mesh(new THREE.SphereGeometry(er*.3,12,10),pup,ex,EY,ez+er*.6,false));
-      face.add(mesh(new THREE.SphereGeometry(er*.11,8,6),glint,ex+er*.2,EY+er*.22,ez+er*.66,false));
+      const e=mesh(new THREE.SphereGeometry(er,20,16),eyeW,ex,EY,ez,false); e.scale.set(1,.8,.62); e.userData.ce=1; face.add(e);
+      const ir=mesh(new THREE.SphereGeometry(er*.6,16,12),iris,ex,EY,ez+er*.42,false); ir.scale.set(1,1.05,.42); ir.userData.ce=1; face.add(ir);
+      { const pm=mesh(new THREE.SphereGeometry(er*.3,12,10),pup,ex,EY,ez+er*.6,false); pm.userData.ce=1; face.add(pm); }
+      { const gm=mesh(new THREE.SphereGeometry(er*.11,8,6),glint,ex+er*.2,EY+er*.22,ez+er*.66,false); gm.userData.ce=1; face.add(gm); }
       if(F.brows&&!fileEyes){ const br=mesh(new RoundedBoxGeometry(.036,.0055,.006,2,.0025),brow,sx*(F.eyeX+.002),F.eyeY+.026,F.eyeZ+.004,false); br.rotation.z=sx*-.1; br.rotation.y=sx*.25; face.add(br); } } }
   const hcol=new THREE.Color(o.hairColor||HAIRC[0]);
   const strands=canvasTex(256,256,(g,w,h)=>{ g.fillStyle='#d6d6d6'; g.fillRect(0,0,w,h); for(let i=0;i<900;i++){ const x=Math.random()*w, l=.4+Math.random()*.6; g.strokeStyle=`rgba(${Math.random()<.5?'255,255,255':'0,0,0'},${.08+Math.random()*.18})`; g.lineWidth=.6+Math.random()*1.4; g.beginPath(); g.moveTo(x,0); g.bezierCurveTo(x+6,h*.3,x-6,h*.6,x+(Math.random()-.5)*10,h*l); g.stroke(); } },[3,1]);
@@ -5947,6 +5948,40 @@ function addClockInfo(){ const ck=$('#cpBody .clock'); if(!ck||ck.querySelector(
  @media (max-width:599px){.th-row{grid-template-columns:1fr;gap:4px}}`; document.head.appendChild(st); }
 
 /* ================================================================
+   REAL EYES — anatomically sized eyeballs fitted to the model's own Eyes mesh (sphere fit),
+   replacing the stylised eyes, plus skin eyelid shells that close (blink / AVPU) for every GLB character.
+   ================================================================ */
+function realEyes(model,frame,skinCol){ let head=null; model.traverse(b=>{ if(b.isBone&&/head$/i.test(b.name)&&!head) head=b; }); if(!head) return null;
+  frame.updateMatrixWorld(true); const fits={};
+  const lids=[]; let eyeMesh=null; model.traverse(m=>{ if(m.isMesh&&/^eyes?$/i.test((Array.isArray(m.material)?m.material[0]:m.material).name||'')) eyeMesh=m; });
+  if(eyeMesh){ const pa=eyeMesh.geometry.attributes.position, tmp=new THREE.Vector3(), sides={L:[],R:[]};
+    eyeMesh.updateMatrixWorld(true); for(let i=0;i<pa.count;i++){ tmp.fromBufferAttribute(pa,i); if(eyeMesh.isSkinnedMesh) eyeMesh.applyBoneTransform(i,tmp); tmp.applyMatrix4(eyeMesh.matrixWorld); frame.worldToLocal(tmp); (tmp.x<0?sides.L:sides.R).push(tmp.clone()); }
+    const fit=P=>{ // least-squares sphere: |p|² = 2c·p + k
+      const A=[[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]], bb=[0,0,0,0]; for(const p of P){ const r=[2*p.x,2*p.y,2*p.z,1], f=p.lengthSq(); for(let i=0;i<4;i++){ bb[i]+=r[i]*f; for(let j=0;j<4;j++) A[i][j]+=r[i]*r[j]; } }
+      for(let i=0;i<4;i++){ let mx=i; for(let k=i+1;k<4;k++) if(Math.abs(A[k][i])>Math.abs(A[mx][i])) mx=k; [A[i],A[mx]]=[A[mx],A[i]]; [bb[i],bb[mx]]=[bb[mx],bb[i]];
+        for(let k=i+1;k<4;k++){ const f=A[k][i]/A[i][i]; for(let j=i;j<4;j++) A[k][j]-=f*A[i][j]; bb[k]-=f*bb[i]; } }
+      const x=[0,0,0,0]; for(let i=3;i>=0;i--){ let t=bb[i]; for(let j=i+1;j<4;j++) t-=A[i][j]*x[j]; x[i]=t/A[i][i]; }
+      const c=new THREE.Vector3(x[0],x[1],x[2]); return {c,r:Math.sqrt(x[3]+c.lengthSq())}; };
+    const skinRef=skinMatsOf(model)[0]; const lidMat=new THREE.MeshStandardMaterial({name:'Eyelid',color:skinRef&&skinRef.map?mapMean(skinRef.map).clone().multiply(skinRef.color):new THREE.Color(skinCol||SKIN[1]),roughness:.6});
+    const lashMat=new THREE.MeshBasicMaterial({color:'#2a1d18'});
+    // the shared character rig draws stylised eyeballs on the head; the patient gets anatomically sized ones in the real socket instead
+    head.traverse(m=>{ if(m.isMesh&&m.geometry&&m.userData.ce) m.visible=false; });
+    const scl=new THREE.MeshPhysicalMaterial({color:'#EEE9E3',roughness:.18,clearcoat:.6,clearcoatRoughness:.1}), irisM=new THREE.MeshPhysicalMaterial({color:'#3A2417',roughness:.25,clearcoat:.8,clearcoatRoughness:.05}), pupM=new THREE.MeshStandardMaterial({color:'#060606',roughness:.1});
+    for(const S of ['L','R']){ if(sides[S].length<20) continue; const {c,r}=fit(sides[S]); fits[S]={c:c.toArray().map(v=>+v.toFixed(4)),r:+r.toFixed(4)}; if(!(r>.005&&r<.03)) continue;
+      const R=r+.0011, TH=1.98; // cap from the top of the eyeball to just below the front centre
+      const holder=new THREE.Object3D(); holder.matrixAutoUpdate=false; head.add(holder);
+      const hw=head.getWorldQuaternion(new THREE.Quaternion()), hs=head.getWorldScale(new THREE.Vector3()), sc=1/((hs.x+hs.y+hs.z)/3);
+      holder.matrix.compose(head.worldToLocal(frame.localToWorld(c.clone())),hw.invert(),new THREE.Vector3(sc,sc,sc));
+      const ball=new THREE.Mesh(new THREE.SphereGeometry(r*.985,24,18),scl); holder.add(ball);
+      const iris=new THREE.Mesh(new THREE.SphereGeometry(r*.995,24,6,0,Math.PI*2,0,.43),irisM); iris.rotation.x=Math.PI/2; holder.add(iris);
+      const pup=new THREE.Mesh(new THREE.SphereGeometry(r*1.0,16,4,0,Math.PI*2,0,.17),pupM); pup.rotation.x=Math.PI/2; holder.add(pup);
+      const lid=new THREE.Group(); holder.add(lid);
+      const cap=new THREE.Mesh(new THREE.SphereGeometry(R,28,18,0,Math.PI,0,TH),lidMat); lid.add(cap);
+      const lash=new THREE.Mesh(new THREE.TorusGeometry(R*Math.sin(TH),.00055,4,28,Math.PI),lashMat); lash.rotation.x=Math.PI/2; lash.position.y=R*Math.cos(TH); lid.add(lash);
+      lid.rotation.x=-.95; lids.push(lid); } }
+  if(lids.length!==2) return null;
+  const out={lids,lidMat:lids[0].children[0].material,fits}; out.lid0=out.lidMat.color.clone(); model.userData.realEyes=out; return out; }
+/* ================================================================
    PATIENT RIG ADAPTER — lets a skinned GLB patient stand in for the procedural body
    without touching the clinical code. Every caller keeps using the procedural contract:
      pt.children[0]                 body group (sit-up rotation)
@@ -6030,38 +6065,13 @@ function buildPatientRig(gltf,o,t){
   const chest=wp(B.spine2).add(new THREE.Vector3(0,.02*H,0));
   parts.torso=sock('spine2',null,chest,new THREE.Vector3(1.04,1,.64));
   for(const S of ['L','R']){
-    parts['arm'+S]=sock(A['arm'+S],dirOf(A['arm'+S],A['el'+S]));
-    const el=sock(A['el'+S],dirOf(A['el'+S],A['hand'+S])); parts['arm'+S].userData.el=el;
+    parts['arm'+S]=sock(A['arm'+S],dirOf(A['arm'+S],A['el'+S])); socks[socks.length-1].sitX=-.55;   // when the backrest rises, arms come forward…
+    const el=sock(A['el'+S],dirOf(A['el'+S],A['hand'+S])); parts['arm'+S].userData.el=el; socks[socks.length-1].sitX=-.35;   // …and elbows bend so the hands stay on the blanket
     const fk=A['hand'+S].replace('hand','handmiddle1'); const hs=sock(A['hand'+S],B[fk]?dirOf(A['hand'+S],fk):dirOf(A['el'+S],A['hand'+S])); parts['arm'+S].userData.hand=hs;
     const i3=A['hand'+S].replace('hand','handindex3'), i2=A['hand'+S].replace('hand','handindex2'); if(B[i3]&&B[i2]) parts['arm'+S].userData.finger=sock(i3,dirOf(i2,i3));
     parts['leg'+S]=sock(A['leg'+S],dirOf(A['leg'+S],A['knee'+S])); }
-  // eyelids: when the asset has no blink morphs, a skin-coloured lid shell per eyeball (fitted from the Eyes mesh) slides down over the eye
-  const lids=[]; let eyeMesh=null; model.traverse(m=>{ if(m.isMesh&&/^eyes?$/i.test((Array.isArray(m.material)?m.material[0]:m.material).name||'')) eyeMesh=m; });
-  if(eyeMesh){ const pa=eyeMesh.geometry.attributes.position, tmp=new THREE.Vector3(), sides={L:[],R:[]};
-    eyeMesh.updateMatrixWorld(true); for(let i=0;i<pa.count;i++){ tmp.fromBufferAttribute(pa,i); if(eyeMesh.isSkinnedMesh) eyeMesh.applyBoneTransform(i,tmp); tmp.applyMatrix4(eyeMesh.matrixWorld); pt.worldToLocal(tmp); (tmp.x<0?sides.L:sides.R).push(tmp.clone()); }
-    const fit=P=>{ // least-squares sphere: |p|² = 2c·p + k
-      const A=[[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]], bb=[0,0,0,0]; for(const p of P){ const r=[2*p.x,2*p.y,2*p.z,1], f=p.lengthSq(); for(let i=0;i<4;i++){ bb[i]+=r[i]*f; for(let j=0;j<4;j++) A[i][j]+=r[i]*r[j]; } }
-      for(let i=0;i<4;i++){ let mx=i; for(let k=i+1;k<4;k++) if(Math.abs(A[k][i])>Math.abs(A[mx][i])) mx=k; [A[i],A[mx]]=[A[mx],A[i]]; [bb[i],bb[mx]]=[bb[mx],bb[i]];
-        for(let k=i+1;k<4;k++){ const f=A[k][i]/A[i][i]; for(let j=i;j<4;j++) A[k][j]-=f*A[i][j]; bb[k]-=f*bb[i]; } }
-      const x=[0,0,0,0]; for(let i=3;i>=0;i--){ let t=bb[i]; for(let j=i+1;j<4;j++) t-=A[i][j]*x[j]; x[i]=t/A[i][i]; }
-      const c=new THREE.Vector3(x[0],x[1],x[2]); return {c,r:Math.sqrt(x[3]+c.lengthSq())}; };
-    const skinRef=skinMatsOf(model)[0]; const lidMat=new THREE.MeshStandardMaterial({name:'Eyelid',color:skinRef&&skinRef.map?mapMean(skinRef.map).clone().multiply(skinRef.color):new THREE.Color(o.skin||SKIN[1]),roughness:.6});
-    const lashMat=new THREE.MeshBasicMaterial({color:'#2a1d18'});
-    // the shared character rig draws stylised eyeballs on the head; the patient gets anatomically sized ones in the real socket instead
-    B.head.traverse(m=>{ if(m.isMesh&&m.geometry&&m.geometry.type==='SphereGeometry'&&!m.isSkinnedMesh) m.visible=false; });
-    const scl=new THREE.MeshPhysicalMaterial({color:'#EEE9E3',roughness:.18,clearcoat:.6,clearcoatRoughness:.1}), irisM=new THREE.MeshPhysicalMaterial({color:'#3A2417',roughness:.25,clearcoat:.8,clearcoatRoughness:.05}), pupM=new THREE.MeshStandardMaterial({color:'#060606',roughness:.1});
-    for(const S of ['L','R']){ if(sides[S].length<20) continue; const {c,r}=fit(sides[S]); (PTRIG.eyeFit=PTRIG.eyeFit||{})[S]={c:c.toArray().map(v=>+v.toFixed(4)),r:+r.toFixed(4)}; if(!(r>.005&&r<.03)) continue;
-      const R=r+.0011, TH=1.98; // cap from the top of the eyeball to just below the front centre
-      const holder=new THREE.Object3D(); holder.matrixAutoUpdate=false; B.head.add(holder);
-      const hw=B.head.getWorldQuaternion(new THREE.Quaternion()), hs=B.head.getWorldScale(new THREE.Vector3()), sc=1/((hs.x+hs.y+hs.z)/3);
-      holder.matrix.compose(B.head.worldToLocal(pt.localToWorld(c.clone())),hw.invert(),new THREE.Vector3(sc,sc,sc));
-      const ball=new THREE.Mesh(new THREE.SphereGeometry(r*.985,24,18),scl); holder.add(ball);
-      const iris=new THREE.Mesh(new THREE.SphereGeometry(r*.995,24,6,0,Math.PI*2,0,.43),irisM); iris.rotation.x=Math.PI/2; holder.add(iris);
-      const pup=new THREE.Mesh(new THREE.SphereGeometry(r*1.0,16,4,0,Math.PI*2,0,.17),pupM); pup.rotation.x=Math.PI/2; holder.add(pup);
-      const lid=new THREE.Group(); holder.add(lid);
-      const cap=new THREE.Mesh(new THREE.SphereGeometry(R,28,18,0,Math.PI,0,TH),lidMat); lid.add(cap);
-      const lash=new THREE.Mesh(new THREE.TorusGeometry(R*Math.sin(TH),.00055,4,28,Math.PI),lashMat); lash.rotation.x=Math.PI/2; lash.position.y=R*Math.cos(TH); lid.add(lash);
-      lid.rotation.x=-.95; lids.push(lid); } }
+  // eyelids: instGLB already fitted real eyes + lid shells (realEyes); fall back to blink morphs below
+  const RE=model.userData.realEyes||null; const lids=RE?RE.lids:[]; if(RE) PTRIG.eyeFit=RE.fits;
   // eyelids: ARKit / generic blink morphs when the asset has them
   const blink=[]; model.traverse(m=>{ const d=m.morphTargetDictionary; if(!d) return; for(const [n,i] of Object.entries(d)) if(/eye.?blink|eyes?.?closed?|blink/i.test(n)) blink.push([m,i]); });
   parts.eyes=[new THREE.Object3D(),new THREE.Object3D()]; parts.mouth=new THREE.Object3D();
@@ -6071,11 +6081,12 @@ function buildPatientRig(gltf,o,t){
   const proxy={color:ref.clone(),roughness:.58,clearcoat:0,clearcoatRoughness:.25};
   const tint0=skinMats.map(m=>m.color.clone());
   const caps={eyeFit:PTRIG.eyeFit||null,eyelids:blink.length>0?'morph':lids.length===2?'shell':false,skin:skinMats.length>0,bones:true,morphs:blink.length,gown:true};
-  pt.userData={parts,skin:proxy,base:{skin:ref.clone()},rig:{socks,blink,skinMats,tint0,ref,caps,B,neck:B.neck,lids,lidMat:lids[0]&&lids[0].children[0].material,lid0:lids[0]&&lids[0].children[0].material.color.clone()}};
+  pt.userData={parts,skin:proxy,base:{skin:ref.clone()},rig:{socks,blink,skinMats,tint0,ref,caps,B,neck:B.neck,lids,lidMat:RE&&RE.lidMat,lid0:RE&&RE.lid0}};
   return pt; }
 function syncPatientRig(){ const pt=W3.pt; const R=pt&&pt.userData.rig; if(!R) return;
   const q=new THREE.Quaternion();
-  for(const s of R.socks){ q.setFromEuler(s.so.rotation); s.b.quaternion.copy(s.bind).multiply(s.L.clone().multiply(q).multiply(s.Li));
+  const sit=(typeof PT!=='undefined'&&PT.sit)||0;
+  for(const s of R.socks){ q.setFromEuler(s.so.rotation); if(sit&&s.sitX){ q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),s.sitX*sit)); } s.b.quaternion.copy(s.bind).multiply(s.L.clone().multiply(q).multiply(s.Li));
     const r=s.so.scale, bs=s.base; if(r.x!==bs.x||r.y!==bs.y||r.z!==bs.z){ // breathing: scale along socket axes, mapped into bone axes
       const f=new THREE.Vector3(r.x/bs.x,r.y/bs.y,r.z/bs.z), out=new THREE.Vector3(1,1,1);
       [[1,0,0],[0,1,0],[0,0,1]].forEach((ax,i)=>{ const v=new THREE.Vector3(...ax).applyQuaternion(s.L); const a=[Math.abs(v.x),Math.abs(v.y),Math.abs(v.z)]; const j=a.indexOf(Math.max(...a)); out.setComponent(j,f.getComponent(i)); });
@@ -6113,6 +6124,26 @@ function snapToBody(obj){ const pt=W3.pt; if(!pt||!pt.userData.rig) return false
     const glow=mesh(new THREE.SphereGeometry(.004,8,6),new THREE.MeshBasicMaterial({color:'#ff2a2a'}),0,-.006,.012,false); pr.add(glow);
     const fg=arm.userData.finger; if(fg){ pr.position.set(0,-.006,0); fg.add(pr); } else if(hs){ pr.position.set(0,-.085,.006); hs.add(pr); } else if(el){ pr.position.set(0,-.31,.01); el.add(pr); }
     FX.spo2probe=pr; try{ const mon=W3.mon.getWorldPosition(V3()).add(V3(0,1.1,0)); tubeBetween(pr.getWorldPosition(V3()),mon,'#2b2f33',.004,.3); }catch(e){} }; }
+/* staff and relatives blink every few seconds (patient lids follow AVPU through the rig) */
+onFrame((dt)=>{ const L=[W3.player,...(W3.ert||[]),...(W3.helpers||[]),W3.relative]; for(const r of L){ const m=r&&r.children&&r.children[0], E=m&&m.userData&&m.userData.realEyes; if(!E) continue;
+    E.t=(E.t??(2+Math.random()*4))-dt; if(E.t<0){ E.t=2.5+Math.random()*4; E.b=0; } if(E.b!=null){ E.b+=dt; const k=E.b<.07?E.b/.07:E.b<.16?1-(E.b-.07)/.09:0; if(E.b>=.16) E.b=null; E.lids.forEach(l=>l.rotation.x=-.95*(1-k)); } } });
+
+/* adjustable bed: the backrest and pillow hinge at the patient's hips and follow the sit-up angle */
+function bedHinge(){ if(!W3.bed||!W3.pt) return; const bed=W3.bed; let H=bed.userData.hinge;
+  if(!H){ let mat=null, pil=null; bed.children.forEach(c=>{ if(!c.geometry) return; c.geometry.computeBoundingBox(); const z=c.geometry.boundingBox.getSize(new THREE.Vector3()); if(Math.abs(z.z-2.02)<.01&&Math.abs(z.x-.96)<.01) mat=c; if(Math.abs(z.z-.38)<.01&&Math.abs(z.x-.62)<.01) pil=c; });
+    if(!mat) return; const mm=mat.material; H=bed.userData.hinge={mat,pil,mm,piv:new THREE.Group(),seat:null,back:null,z:null}; bed.add(H.piv); }
+  // hinge where the patient's body pivots (body-space hips) — recomputed per patient
+  const body=W3.pt.children[0], keep=body.rotation.x, kp=body.position.clone(); body.rotation.x=0; body.position.set(0,0,0); body.updateWorldMatrix(true,false);
+  const hz=bed.worldToLocal(body.localToWorld(new THREE.Vector3(0,.92,0))).z; body.rotation.x=keep; body.position.copy(kp); body.updateWorldMatrix(true,false);
+  if(H.z!=null&&Math.abs(H.z-hz)<.005) return; H.z=Math.max(-.7,Math.min(.4,hz));
+  [H.seat,H.back].forEach(m=>m&&m.parent&&m.parent.remove(m)); H.mat.visible=false; if(H.pil) H.pil.visible=false;
+  const z0=-1.01, z1=1.01, zc=H.z, top=.57;
+  H.seat=mesh(new RoundedBoxGeometry(.96,.18,z1-zc,4,.06),H.mm,0,top,(zc+z1)/2); bed.add(H.seat);
+  H.piv.position.set(0,top+.09,zc); H.piv.clear();
+  H.back=mesh(new RoundedBoxGeometry(.96,.18,zc-z0,4,.06),H.mm,0,-.09,-(zc-z0)/2); H.piv.add(H.back);
+  if(H.pil){ const pl=H.pil.clone(); pl.visible=true; pl.position.set(0,.72-(top+.09),-.8-zc); H.piv.add(pl); } }
+{ const _sp=setupPatient; setupPatient=function(cs){ _sp.apply(this,arguments); try{ if(W3.bed&&W3.bed.userData.hinge) W3.bed.userData.hinge.z=null; bedHinge(); }catch(e){ console.warn('bed hinge',e); } }; }
+onFrame(()=>{ const H=W3.bed&&W3.bed.userData.hinge; if(H&&H.piv) H.piv.rotation.x=PT.sit; });
 if(window.__ert) window.__ert.ptRig=PTRIG;
 
 /* ---------- larger vital-sign numbers on phones ---------- */
