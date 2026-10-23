@@ -1317,7 +1317,7 @@ function setupPatient(cs){
   const blk=new THREE.MeshPhysicalMaterial({color:neo?'#F6E7A9':'#E9EEF2',roughness:.95,sheen:.6,sheenColor:new THREE.Color('#ffffff')});
   const len=(neo?.34:.9*sc+.1), wdt=neo?.26:(.86*Math.min(1,sc+.15));
   const bl=mesh(new RoundedBoxGeometry(wdt,neo?.08:.12*sc+.04,len,4,.04),blk,0,neo?.035:.05*sc+.02,1.62*sc-len/2+(neo?.03:.05));
-  holder.add(bl);
+  holder.add(bl); W3.boxBlanket=bl;
   if(cs.look?.belly){ const b=mesh(new THREE.SphereGeometry(.17*sc,24,18),getGown(),0,.12*sc,1.62*sc-.98*sc); b.scale.set(1.05,.9,1.1); holder.add(b); }
   W3.bleedMark=null;
   if(cs.look?.bleed){ const d=mesh(new THREE.CircleGeometry(.075*sc,20),M('#8E1B22',{roughness:.4}),.06*sc,.125*sc+.006,.58*sc,false); d.rotation.x=-Math.PI/2; holder.add(d); W3.bleedMark=d; }
@@ -6018,6 +6018,10 @@ function buildPatientRig(gltf,o,t){
   const inst=instGLB(gltf,Object.assign({},o,{scrub:t.test?'#7FA9C4':(o.scrub||'#9DBFD3'),acc:new Set(),height:o.height||168,hairStyle:o.hairStyle==='bob'?'bob':'short'}));
   if(inst.userData.mixer){ inst.userData.mixer.stopAllAction(); }
   const model=inst.children[0]; inst.remove(model);
+  // grey hair for older patients: the hair textures are dark, so the tint has to lift them further than the staff cap of ×4
+  if(o.hairColor&&/^#b/i.test(o.hairColor)) model.traverse(m=>{ if(!m.isMesh) return; const mt=m.material; if(!mt||Array.isArray(mt)) return; const n=(mt.name||'').toLowerCase();
+    if(/^hair/.test(n)&&mt.map){ const L=Math.max(.03,mapMean(mt.map).r); mt.color=new THREE.Color(o.hairColor).multiplyScalar(Math.min(14,.55/L)); mt.needsUpdate=true; }
+    if(/eyebrow/.test(n)) mt.color=new THREE.Color('#d9d6d0'); });
   // patient clothing: scrub top/trousers become a hospital gown, shoes removed (feet are under the blanket)
   const gownTex=getGown().map.clone(); gownTex.needsUpdate=true; gownTex.repeat.set(9,9);
   model.traverse(m=>{ if(!m.isMesh) return; const n=((Array.isArray(m.material)?m.material[0]:m.material).name||'').toLowerCase();
@@ -6145,6 +6149,132 @@ function bedHinge(){ if(!W3.bed||!W3.pt) return; const bed=W3.bed; let H=bed.use
 { const _sp=setupPatient; setupPatient=function(cs){ _sp.apply(this,arguments); try{ if(W3.bed&&W3.bed.userData.hinge) W3.bed.userData.hinge.z=null; bedHinge(); }catch(e){ console.warn('bed hinge',e); } }; }
 onFrame(()=>{ const H=W3.bed&&W3.bed.userData.hinge; if(H&&H.piv) H.piv.rotation.x=PT.sit; });
 if(window.__ert) window.__ert.ptRig=PTRIG;
+
+/* ================================================================
+   VISUAL PASS 1 — lighting balance, per-material response, bedding
+   Lighting: the ward had a 6× point light right above the bed on top of a 0.9 hemisphere and
+   the environment map, so the bed and patient sat in the 240–255 range and lost detail. The
+   fix lowers those fills, keeps the window sun as the shadow-casting key, and tightens its shadow
+   to the bed for crisper contact shadows. No light is added.
+   Materials: skin, fabric, plastic and metal get different specular/sheen/roughness and a fine
+   procedural normal (pores / weave) so texture detail is kept and nothing reads as plastic.
+   Bedding: the box blanket becomes a draped mesh shaped over pelvis, legs and feet (capsules from
+   the patient's own bones/parts), with a turned-down sheet hem and sides hanging over the mattress.
+   ================================================================ */
+const VIS={on:true};
+function normalTex(size,fn,repeat){ const c=document.createElement('canvas'); c.width=c.height=size; const g=c.getContext('2d'), d=g.createImageData(size,size), H=new Float32Array(size*size);
+  for(let y=0;y<size;y++) for(let x=0;x<size;x++) H[y*size+x]=fn(x/size,y/size);
+  for(let y=0;y<size;y++) for(let x=0;x<size;x++){ const i=y*size+x, l=H[y*size+((x-1+size)%size)], r=H[y*size+((x+1)%size)], u=H[((y-1+size)%size)*size+x], dn=H[((y+1)%size)*size+x];
+    let nx=(l-r)*2, ny=(u-dn)*2, nz=1; const k=1/Math.hypot(nx,ny,nz); d.data[i*4]=(nx*k*.5+.5)*255; d.data[i*4+1]=(ny*k*.5+.5)*255; d.data[i*4+2]=(nz*k*.5+.5)*255; d.data[i*4+3]=255; }
+  g.putImageData(d,0,0); const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.NoColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(repeat,repeat); t.anisotropy=4; return t; }
+let _rnd=1; const rnd=()=>{ _rnd=(_rnd*16807)%2147483647; return _rnd/2147483647; };
+const NT={};
+function weaveN(rep=40){ const k='w'+rep; return NT[k]||(NT[k]=normalTex(128,(u,v)=>.5*Math.sin(u*Math.PI*2*16)*Math.sin(v*Math.PI*2*16)+.25*Math.sin((u+v)*Math.PI*2*8),rep)); }
+function waffleN(rep=10){ const k='f'+rep; return NT[k]||(NT[k]=normalTex(128,(u,v)=>{ const a=Math.abs(Math.sin(u*Math.PI*8)), b=Math.abs(Math.sin(v*Math.PI*8)); return Math.min(a,b)*1.6+.15*Math.sin(u*Math.PI*64)*Math.sin(v*Math.PI*64); },rep)); }
+function poreN(rep=6){ const k='p'+rep; if(NT[k]) return NT[k]; _rnd=7; const pts=[]; for(let i=0;i<260;i++) pts.push([rnd(),rnd(),.004+rnd()*.006]);
+  return NT[k]=normalTex(256,(u,v)=>{ let h=.12*Math.sin(u*90+Math.sin(v*40)*2)*Math.sin(v*70); for(const [x,y,r] of pts){ let dx=Math.abs(u-x), dy=Math.abs(v-y); dx=Math.min(dx,1-dx); dy=Math.min(dy,1-dy); const d2=dx*dx+dy*dy; if(d2<r*r) h-=.9*(1-d2/(r*r)); } return h; },rep); }
+function sheetTex(col,lines){ return canvasTex(256,256,(c,w,h)=>{ c.fillStyle=col; c.fillRect(0,0,w,h); for(let i=0;i<2600;i++){ c.fillStyle=`rgba(${Math.random()<.5?'255,255,255':'60,70,70'},${.02+Math.random()*.035})`; c.fillRect(Math.random()*w,Math.random()*h,1+Math.random()*2,1); }
+  if(lines){ c.strokeStyle='rgba(0,0,0,.05)'; for(let y=0;y<h;y+=8){ c.beginPath(); c.moveTo(0,y+Math.random()); c.lineTo(w,y+Math.random()); c.stroke(); } } },[3,3]); }
+const MATS={};
+function linenMat(){ return MATS.linen||(MATS.linen=new THREE.MeshPhysicalMaterial({name:'Linen',color:'#E3E7E6',map:sheetTex('#ffffff',false),normalMap:weaveN(30),normalScale:new THREE.Vector2(.35,.35),roughness:.93,sheen:.35,sheenRoughness:.8,sheenColor:new THREE.Color('#ffffff'),specularIntensity:.15})); }
+function blanketMat(){ if(MATS.blanket) return MATS.blanket; const t=sheetTex('#ffffff',true); t.repeat.set(6,6);
+  return MATS.blanket=new THREE.MeshPhysicalMaterial({name:'Blanket',color:'#93AE9F',map:t,normalMap:waffleN(14),normalScale:new THREE.Vector2(.55,.55),roughness:.95,sheen:.6,sheenRoughness:.75,sheenColor:new THREE.Color('#d9e8de'),specularIntensity:.1,side:THREE.DoubleSide}); }
+function visualLights(){ if(!W3.ward||W3.ward.userData.vis) return; W3.ward.userData.vis=1;
+  W3.ward.traverse(o=>{ if(!o.isLight) return;
+    if(o.isHemisphereLight){ o.intensity=.5; o.color.set('#fff6ea'); o.groundColor.set('#7d8a86'); }
+    else if(o.isPointLight&&o!==W3.redLight&&o!==W3.warmLight&&o.intensity>=5){ o.intensity=1.8; o.color.set('#fff1dd'); o.position.y=2.75; }
+    else if(o.isDirectionalLight&&o.castShadow){ o.intensity=2.1; o.color.set('#ffeedd'); o.shadow.mapSize.set(2048,2048); Object.assign(o.shadow.camera,{left:-2.4,right:2.4,top:2.6,bottom:-2.2}); o.shadow.camera.updateProjectionMatrix(); o.shadow.bias=-.0003; o.shadow.normalBias=.015; o.shadow.radius=3; if(o.shadow.map){ o.shadow.map.dispose(); o.shadow.map=null; } } });
+  W3.sc.environmentIntensity=.42; W3.r.toneMappingExposure=.96; }
+// bed linens: mattress cover and pillow get linen; frame stays painted metal
+function visualBed(){ const bed=W3.bed; if(!bed||bed.userData.vis) return; bed.userData.vis=1; bed.traverse(m=>{ if(!m.isMesh) return; const c=m.material&&m.material.color; if(!c) return; const h=c.getHexString();
+    if(h==='eef3f6'||h==='ffffff') m.material=linenMat(); }); }
+// character materials: skin keeps its texture, loses the waxy sheen; clothing gets weave + soft sheen
+function visualChar(root){ if(!root||root.userData.visChar) return; root.userData.visChar=1;
+  root.traverse(m=>{ if(!m.isMesh) return; const mats=Array.isArray(m.material)?m.material:[m.material]; mats.forEach(mt=>{ const n=(mt.name||'').toLowerCase();
+    if(/skin/.test(n)&&mt.isMeshPhysicalMaterial){ mt.sheen=.18; mt.sheenRoughness=.7; mt.sheenColor=new THREE.Color('#ffb59a'); mt.roughness=.6; mt.specularIntensity=.32; mt.normalMap=poreN(7); mt.normalScale=new THREE.Vector2(.18,.18); mt.needsUpdate=true; }
+    else if(/scrub|gown|pants|top/.test(n)){ if(mt.isMeshPhysicalMaterial||mt.isMeshStandardMaterial){ mt.normalMap=weaveN(26); mt.normalScale=new THREE.Vector2(.45,.45); mt.roughness=.94; if('sheen' in mt){ mt.sheen=.4; mt.sheenRoughness=.8; mt.sheenColor=mt.color.clone().lerp(new THREE.Color('#ffffff'),.4); mt.specularIntensity=.12; } mt.needsUpdate=true; } } }); }); }
+{ const _i=instGLB; instGLB=function(){ const r=_i.apply(this,arguments); try{ visualChar(r); }catch(e){ console.warn('visualChar',e); } return r; }; }
+
+/* ---------- draped blanket ---------- */
+function bodyCapsules(){ const pt=W3.pt, bed=W3.bed; if(!pt||!bed) return []; const U=pt.userData, R=U.rig, out=[], w=v=>bed.worldToLocal(v);
+  const V=()=>new THREE.Vector3(); pt.updateMatrixWorld(true);
+  if(R){ const B=R.B, P=k=>w(B[k].getWorldPosition(V())); const H=(W3.ptScale||1);
+    for(const s of ['left','right']){ out.push([P(s+'upleg'),P(s+'leg'),.085*H]); out.push([P(s+'leg'),P(s+'foot'),.058*H]); if(B[s+'toebase']) out.push([P(s+'foot'),P(s+'toebase'),.045*H]); }
+    out.push([P('leftupleg'),P('rightupleg'),.125*H]); out.push([P('hips'),P('spine'),.12*H]); }
+  else { const P=U.parts; for(const L of [P.legL,P.legR]){ const a=w(L.getWorldPosition(V())), k=w(L.localToWorld(new THREE.Vector3(0,-.42,0))), f=w(L.localToWorld(new THREE.Vector3(0,-.84,0))), t=w(L.localToWorld(new THREE.Vector3(0,-.88,.14)));
+      const r=.08*(W3.ptScale||1); out.push([a,k,r],[k,f,r*.75],[f,t,r*.55]); }
+    out.push([w(P.legL.getWorldPosition(V())),w(P.legR.getWorldPosition(V())),.12*(W3.ptScale||1)]); }
+  // pregnant belly or other spheres added to the patient holder
+  if(W3.patient) W3.patient.children.forEach(c=>{ if(c.isMesh&&c.geometry&&c.geometry.type==='SphereGeometry'){ const p=w(c.getWorldPosition(V())), r=c.geometry.parameters.radius*Math.max(c.scale.x,c.scale.y,c.scale.z)*(c.getWorldScale(V()).x/Math.max(1e-6,c.scale.x)); out.push([p,p.clone(),r]); } });
+  return out; }
+function capTop(caps,x,z){ let top=-1; for(const [a,b,r] of caps){ const abx=b.x-a.x, abz=b.z-a.z, L2=abx*abx+abz*abz; let t=L2>1e-8?((x-a.x)*abx+(z-a.z)*abz)/L2:0; t=Math.max(0,Math.min(1,t));
+    const cx=a.x+abx*t, cz=a.z+abz*t, cy=a.y+(b.y-a.y)*t, h2=(x-cx)**2+(z-cz)**2; if(h2<r*r) top=Math.max(top,cy+Math.sqrt(r*r-h2)); } return top; }
+function bodyRaster(X0,X1,zs,Z1,NX,NZ){ const pt=W3.pt, bed=W3.bed; const out=new Float32Array(NX*NZ).fill(-1); pt.updateMatrixWorld(true);
+  const toBed=new THREE.Matrix4().copy(bed.matrixWorld).invert(), v=new THREE.Vector3(); let n=0;
+  const put=()=>{ const i=Math.round((v.x-X0)/(X1-X0)*(NX-1)), j=Math.round((v.z-zs)/(Z1-zs)*(NZ-1)); if(i<0||j<0||i>=NX||j>=NZ) return; const k=j*NX+i; if(v.y>out[k]) out[k]=v.y; n++; };
+  const armRe=/(arm|hand|shoulder)/i;
+  const P=pt.userData.parts, armSet=new Set(); if(!pt.userData.rig&&P){ [P.armL,P.armR].forEach(a=>a&&a.traverse(o=>armSet.add(o))); }
+  pt.children[0].traverse(m=>{ if(!m.isMesh||!m.visible||armSet.has(m)) return; const mat=Array.isArray(m.material)?m.material[0]:m.material; if(/eye|lid|hair|brow/i.test((mat&&mat.name)||'')) return;
+    const g=m.geometry, pa=g.attributes.position; if(!pa) return; m.updateMatrixWorld(true); const M=new THREE.Matrix4().multiplyMatrices(toBed,m.matrixWorld);
+    let skip=null; if(m.isSkinnedMesh&&g.attributes.skinIndex){ const si=g.attributes.skinIndex, sw=g.attributes.skinWeight, bones=m.skeleton.bones; skip=i=>{ let best=0,bw=-1; const W=[sw.getX(i),sw.getY(i),sw.getZ(i),sw.getW(i)], I=[si.getX(i),si.getY(i),si.getZ(i),si.getW(i)]; for(let c=0;c<4;c++){ if(W[c]>bw){ bw=W[c]; best=I[c]; } } return armRe.test(bones[best].name); }; }
+    const step=pa.count>20000?2:1;
+    for(let i=0;i<pa.count;i+=step){ if(skip&&skip(i)) continue; v.fromBufferAttribute(pa,i); if(m.isSkinnedMesh){ m.applyBoneTransform(i,v); v.applyMatrix4(M); } else v.applyMatrix4(M); put(); } });
+  // close the gaps between sampled vertices (max filter, 1 cell)
+  const o2=out.slice(); for(let j=0;j<NZ;j++) for(let i=0;i<NX;i++){ let m=out[j*NX+i]; for(let a=-1;a<=1;a++) for(let b=-1;b<=1;b++){ const ii=i+a, jj=j+b; if(ii>=0&&jj>=0&&ii<NX&&jj<NZ) m=Math.max(m,out[jj*NX+ii]); } o2[j*NX+i]=m; }
+  return {h:o2,n}; }
+function buildBlanket(){ const bed=W3.bed, H=bed&&bed.userData.hinge; if(!bed||!bed.visible||!W3.pt) return;
+  if(W3.blanket){ W3.blanket.parent&&W3.blanket.parent.remove(W3.blanket); W3.blanket.traverse(m=>m.geometry&&m.geometry.dispose()); W3.blanket=null; }
+  const caps=bodyCapsules(); if(!caps.length) return;
+  const top=.66, halfW=.48, footZ=1.01, zs=(H&&H.z!=null?H.z:-.12)-.06, NX=46, NZ=70, X0=-.74, X1=.74, Z1=footZ+.2;
+  const hf=new Float32Array(NX*NZ), base=new Float32Array(NX*NZ), body=new Float32Array(NX*NZ);
+  for(let j=0;j<NZ;j++) for(let i=0;i<NX;i++){ const x=X0+(X1-X0)*i/(NX-1), z=zs+(Z1-zs)*j/(NZ-1), k=j*NX+i;
+    const ox=Math.max(0,Math.abs(x)-halfW), oz=Math.max(0,z-footZ), o=Math.hypot(ox,oz);
+    base[k]=top+.012-(o>0?Math.min(.2,o*1.5+o*o*2):0); const bt=capTop(caps,x,z); body[k]=bt>0?bt+.014:-1; }
+  const RB=bodyRaster(X0,X1,zs,Z1,NX,NZ); for(let k=0;k<body.length;k++) if(RB.h[k]>0) body[k]=Math.max(body[k],RB.h[k]+.016);
+  // tent: cloth falls away from every contact point at a limited slope (cones over toes and knees instead of spikes)
+  { const dx=(X1-X0)/(NX-1), dz=(Z1-zs)/(NZ-1), slope=.75, R=7, tent=new Float32Array(body.length).fill(-1);
+    for(let j=0;j<NZ;j++) for(let i=0;i<NX;i++){ const b=body[j*NX+i]; if(b<0) continue; for(let a=-R;a<=R;a++) for(let c=-R;c<=R;c++){ const ii=i+a, jj=j+c; if(ii<0||jj<0||ii>=NX||jj>=NZ) continue;
+      const v=b-slope*Math.hypot(a*dx,c*dz), k=jj*NX+ii; if(v>tent[k]) tent[k]=v; } }
+    for(let k=0;k<body.length;k++) body[k]=tent[k]; }
+  for(let k=0;k<hf.length;k++) hf[k]=Math.max(base[k],body[k]);
+  // drape: blur only lifts the cloth between and around the legs (never below the body or mattress)
+  const tmp=new Float32Array(hf.length), K=[.06,.12,.18,.28,.18,.12,.06];
+  for(let pass=0;pass<3;pass++){ for(let j=0;j<NZ;j++) for(let i=0;i<NX;i++){ let s=0; for(let q=-3;q<=3;q++){ const ii=Math.max(0,Math.min(NX-1,i+q)); s+=hf[j*NX+ii]*K[q+3]; } tmp[j*NX+i]=s; }
+    for(let j=0;j<NZ;j++) for(let i=0;i<NX;i++){ let s=0; for(let q=-3;q<=3;q++){ const jj=Math.max(0,Math.min(NZ-1,j+q)); s+=tmp[jj*NX+i]*K[q+3]; } const k=j*NX+i; hf[k]=Math.max(base[k],body[k],s); } }
+  // gentle folds: lengthwise ripples between the legs, vertical waves where it hangs over the edge
+  for(let j=0;j<NZ;j++) for(let i=0;i<NX;i++){ const x=X0+(X1-X0)*i/(NX-1), z=zs+(Z1-zs)*j/(NZ-1), k=j*NX+i; const hang=Math.max(0,Math.abs(x)-halfW);
+    hf[k]+=.0025*Math.sin(x*38+z*4)*Math.exp(-((Math.abs(x)-.08)**2)/.01)+(hang>0?.005*Math.sin(z*26+x*9):0); }
+  const pos=[], uv=[], idx=[];
+  for(let j=0;j<NZ;j++) for(let i=0;i<NX;i++){ const x=X0+(X1-X0)*i/(NX-1), z=zs+(Z1-zs)*j/(NZ-1); const hang=Math.max(0,Math.abs(x)-halfW), dx=hang>0?Math.sign(x)*(.012+hang*.06):0;
+    pos.push(x+dx-(hang>0?Math.sign(x)*hang*.55:0),hf[j*NX+i],z); uv.push(i/(NX-1)*1.5,j/(NZ-1)*2.2); }
+  for(let j=0;j<NZ-1;j++) for(let i=0;i<NX-1;i++){ const a=j*NX+i, b=a+1, c=a+NX, d=c+1; idx.push(a,c,b,b,c,d); }
+  const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2)); geo.setIndex(idx); geo.computeVertexNormals();
+  const g=new THREE.Group(); g.name='blanket'; const bl=new THREE.Mesh(geo,blanketMat()); bl.castShadow=true; bl.receiveShadow=true; g.add(bl);
+  // turned-down top sheet: the first rows copied slightly above in linen, with a rolled edge
+  const rows=9, sp=[], si=[], su=[]; for(let j=0;j<rows;j++) for(let i=0;i<NX;i++){ const k=j*NX+i; const xx=X0+(X1-X0)*i/(NX-1); if(Math.abs(xx)>halfW+.03){ sp.push(pos[k*3],pos[k*3+1]-.01,pos[k*3+2]-.004); su.push(0,0); continue; } sp.push(pos[k*3],pos[k*3+1]+.004+.006*(1-j/(rows-1)),pos[k*3+2]-.004); su.push(i/(NX-1)*2,j/(rows-1)*.4); }
+  for(let j=0;j<rows-1;j++) for(let i=0;i<NX-1;i++){ const xa=X0+(X1-X0)*i/(NX-1), xb=X0+(X1-X0)*(i+1)/(NX-1); if(Math.abs(xa)>halfW+.03||Math.abs(xb)>halfW+.03) continue; const a=j*NX+i, b=a+1, c=a+NX, d=c+1; si.push(a,c,b,b,c,d); }
+  const sg=new THREE.BufferGeometry(); sg.setAttribute('position',new THREE.Float32BufferAttribute(sp,3)); sg.setAttribute('uv',new THREE.Float32BufferAttribute(su,2)); sg.setIndex(si); sg.computeVertexNormals();
+  const sheet=new THREE.Mesh(sg,MATS.sheetFold||(MATS.sheetFold=linenMat().clone())); sheet.material.side=THREE.DoubleSide; sheet.castShadow=true; sheet.receiveShadow=true; g.add(sheet);
+  const edge=[]; for(let i=0;i<NX;i++){ const k=i; if(Math.abs(X0+(X1-X0)*i/(NX-1))>halfW+.02) continue; edge.push(new THREE.Vector3(pos[k*3],pos[k*3+1]+.008,pos[k*3+2]-.004)); }
+  const roll=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(edge),60,.011,8,false),sheet.material); roll.castShadow=true; g.add(roll);
+  bed.add(g); W3.blanket=g; if(W3.boxBlanket) W3.boxBlanket.visible=false;
+  W3.blanket.userData.key=[PT.legs.toFixed(2),(W3.ptScale||1).toFixed(2)].join(); }
+{ const _sp=setupPatient; setupPatient=function(cs){ _sp.apply(this,arguments); if(!VIS.on) return; try{ visualLights(); visualBed(); if(W3.pt) visualChar(W3.pt); buildBlanket(); }catch(e){ console.warn('visual pass',e); } }; }
+// raising the legs reshapes the blanket (rate-limited)
+{ let t=0; onFrame((dt)=>{ if(!VIS.on||!W3.blanket||!W3.pt) return; t-=dt; if(t>0) return; t=.4; const key=[PT.legs.toFixed(2),(W3.ptScale||1).toFixed(2)].join(); if(key!==W3.blanket.userData.key&&Math.abs(PT.legs-PT.legsT)<.01) try{ buildBlanket(); }catch(e){} }); }
+/* staff: idle clips out of step with each other, and heads turn toward the patient (additive on top of the clip) */
+{ const _i=instGLB; instGLB=function(){ const r=_i.apply(this,arguments); try{ const u=r.userData; if(u.idle){ u.idle.time=Math.random()*3; u.idle.timeScale=.82+Math.random()*.3; } }catch(e){} return r; }; }
+onFrame((dt)=>{ if(!W3.pt||W3.mode!=='ward') return; const tgt=W3.pt.userData.parts.head.getWorldPosition(new THREE.Vector3());
+  for(const r of [W3.player,...(W3.ert||[]),...(W3.helpers||[])]){ if(!r||!r.userData||!r.userData.glb||r.userData.walking) continue; const B=bonesOf(r), h=B.head, n=B.neck; if(!h) continue;
+    const hp=h.getWorldPosition(new THREE.Vector3()), d=tgt.clone().sub(hp); if(d.length()>3.2) continue;
+    const rq=r.getWorldQuaternion(new THREE.Quaternion()).invert(), dl=d.clone().applyQuaternion(rq).normalize();
+    const yaw=Math.max(-.7,Math.min(.7,Math.atan2(dl.x,dl.z))), pitch=Math.max(-.45,Math.min(.15,-Math.asin(Math.max(-1,Math.min(1,dl.y)))));
+    const u=r.userData; u.lk=u.lk||{y:0,p:0}; const k=Math.min(1,dt*3); u.lk.y+=(yaw-u.lk.y)*k; u.lk.p+=(pitch-u.lk.p)*k;
+    const apply=(b,f)=>{ const pw=b.parent.getWorldQuaternion(new THREE.Quaternion()), rw=r.getWorldQuaternion(new THREE.Quaternion());
+      const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(u.lk.p*f,u.lk.y*f,0,'YXZ')); const qw=rw.clone().multiply(q).multiply(rw.clone().invert());
+      b.quaternion.premultiply(pw.clone().invert().multiply(qw).multiply(pw)); };
+    if(n) apply(n,.4); apply(h,.6); } });
+if(window.__ert) window.__ert.vis={VIS,buildBlanket};
 
 /* ---------- larger vital-sign numbers on phones ---------- */
 { const st=document.createElement('style'); st.textContent=`
