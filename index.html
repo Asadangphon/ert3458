@@ -6193,7 +6193,7 @@ function visualBed(){ const bed=W3.bed; if(!bed||bed.userData.vis) return; bed.u
 // character materials: skin keeps its texture, loses the waxy sheen; clothing gets weave + soft sheen
 function visualChar(root){ if(!root||root.userData.visChar) return; root.userData.visChar=1;
   root.traverse(m=>{ if(!m.isMesh) return; const mats=Array.isArray(m.material)?m.material:[m.material]; mats.forEach(mt=>{ const n=(mt.name||'').toLowerCase();
-    if(/skin/.test(n)&&mt.isMeshPhysicalMaterial){ mt.sheen=.18; mt.sheenRoughness=.7; mt.sheenColor=new THREE.Color('#ffb59a'); mt.roughness=.6; mt.specularIntensity=.32; mt.normalMap=poreN(7); mt.normalScale=new THREE.Vector2(.18,.18); mt.needsUpdate=true; }
+    if(/skin/.test(n)&&mt.isMeshPhysicalMaterial){ mt.sheen=.18; mt.sheenRoughness=.7; mt.sheenColor=new THREE.Color('#ffb59a'); mt.roughness=.6; mt.specularIntensity=.32; mt.needsUpdate=true; }   // no procedural pore map: at game distance it read as a rash
     else if(/scrub|gown|pants|top/.test(n)){ if(mt.isMeshPhysicalMaterial||mt.isMeshStandardMaterial){ mt.normalMap=weaveN(26); mt.normalScale=new THREE.Vector2(.45,.45); mt.roughness=.94; if('sheen' in mt){ mt.sheen=.4; mt.sheenRoughness=.8; mt.sheenColor=mt.color.clone().lerp(new THREE.Color('#ffffff'),.4); mt.specularIntensity=.12; } mt.needsUpdate=true; } } }); }); }
 { const _i=instGLB; instGLB=function(){ const r=_i.apply(this,arguments); try{ visualChar(r); }catch(e){ console.warn('visualChar',e); } return r; }; }
 
