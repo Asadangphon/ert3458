@@ -6020,7 +6020,7 @@ function buildPatientRig(gltf,o,t){
   const model=inst.children[0]; inst.remove(model);
   // grey hair for older patients: the hair textures are dark, so the tint has to lift them further than the staff cap of ×4
   if(o.hairColor&&/^#b/i.test(o.hairColor)) model.traverse(m=>{ if(!m.isMesh) return; const mt=m.material; if(!mt||Array.isArray(mt)) return; const n=(mt.name||'').toLowerCase();
-    if(/^hair/.test(n)&&mt.map){ const L=Math.max(.03,mapMean(mt.map).r); mt.color=new THREE.Color(o.hairColor).multiplyScalar(Math.min(14,.55/L)); mt.needsUpdate=true; }
+    if(/^hair/.test(n)&&mt.map){ const L=Math.max(.03,mapMean(mt.map).r); mt.color=new THREE.Color(o.hairColor).multiplyScalar(Math.min(22,.8/L)); mt.needsUpdate=true; }
     if(/eyebrow/.test(n)) mt.color=new THREE.Color('#d9d6d0'); });
   // patient clothing: scrub top/trousers become a hospital gown, shoes removed (feet are under the blanket)
   const gownTex=getGown().map.clone(); gownTex.needsUpdate=true; gownTex.repeat.set(9,9);
@@ -6049,6 +6049,8 @@ function buildPatientRig(gltf,o,t){
       const ang=(f==='index'?.28:f==='middle'?.36:f==='ring'?.42:.48)*(j===1?.8:1); const q=new THREE.Quaternion().setFromAxisAngle(ax,ang);
       const nw=q.multiply(wq(b)); const pq=b.parent.getWorldQuaternion(new THREE.Quaternion()); b.quaternion.copy(pq.invert().multiply(nw)); pt.updateMatrixWorld(true); }
     aim(A['leg'+S],A['knee'+S],new THREE.Vector3(sx*.03,-1,0)); aim(A['knee'+S],A['foot'+S],new THREE.Vector3(sx*.02,-1,-.02)); }
+  // neck on a pillow: slight flexion (chin toward the chest) instead of the standing model's neutral/extended neck
+  { const ax=new THREE.Vector3(1,0,0); for(const [k,a] of [['neck',.16],['head',.14]]){ const b=B[k]; const nw=new THREE.Quaternion().setFromAxisAngle(ax,a).multiply(wq(b)); const pq=b.parent.getWorldQuaternion(new THREE.Quaternion()); b.quaternion.copy(pq.invert().multiply(nw)); pt.updateMatrixWorld(true); } }
   const H=(o.height||168)/100;
   const socks=[];
   const sock=(bk,dir,worldPos,base)=>{ const b=B[bk]; const bw=wq(b), bs=b.getWorldScale(V()), bp=wp(b);
@@ -6274,6 +6276,12 @@ onFrame((dt)=>{ if(!W3.pt||W3.mode!=='ward') return; const tgt=W3.pt.userData.pa
       const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(u.lk.p*f,u.lk.y*f,0,'YXZ')); const qw=rw.clone().multiply(q).multiply(rw.clone().invert());
       b.quaternion.premultiply(pw.clone().invert().multiply(qw).multiply(pw)); };
     if(n) apply(n,.4); apply(h,.6); } });
+/* ?perf=1 — on-screen performance readout for testing on real phones/tablets/PCs */
+if(/[?&#]perf=1\b/.test(location.search+location.hash)){ const el=document.createElement('div'); el.id='perfHud'; el.style.cssText='position:fixed;left:8px;bottom:8px;z-index:99;font:600 12px/1.35 "IBM Plex Mono",monospace;background:rgba(0,0,0,.72);color:#9ef0c8;padding:6px 8px;border-radius:8px;pointer-events:none;white-space:pre';
+  document.body.appendChild(el); let fr=0, t0=performance.now(), worst=0, last=performance.now();
+  const tick=()=>{ const n=performance.now(); worst=Math.max(worst,n-last); last=n; fr++; if(n-t0>1000&&W3.r){ const i=W3.r.info, c=W3.r.domElement;
+      el.textContent=`FPS ${(fr*1000/(n-t0)).toFixed(0)}  worst ${worst.toFixed(0)} ms\ncalls ${i.render.calls}  tris ${(i.render.triangles/1000).toFixed(0)}k\n${c.width}×${c.height} @${W3.r.getPixelRatio().toFixed(2)}  q${W3.q??'-'}\n${navigator.userAgent.match(/\(([^)]+)\)/)?.[1]?.slice(0,40)||''}`; fr=0; t0=n; worst=0; }
+    requestAnimationFrame(tick); }; requestAnimationFrame(tick); }
 if(window.__ert) window.__ert.vis={VIS,buildBlanket};
 
 /* ---------- larger vital-sign numbers on phones ---------- */
