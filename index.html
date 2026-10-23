@@ -5978,10 +5978,16 @@ function buildPatient(o,cs){
     catch(e){ console.warn('patient rig',e); } }
   PTRIG.last={kind:'procedural',key:null,case:cs&&cs.id,wanted:cs?patientKeys(cs):[]};
   return buildPerson(o); }
+function skinMatsOf(model){ const out=[]; model.traverse(m=>{ if(!m.isMesh) return; (Array.isArray(m.material)?m.material:[m.material]).forEach(mt=>{ if(/skin/i.test(mt.name||'')&&!out.includes(mt)) out.push(mt); }); }); return out; }
 function buildPatientRig(gltf,o,t){
   const inst=instGLB(gltf,Object.assign({},o,{scrub:t.test?'#7FA9C4':(o.scrub||'#9DBFD3'),acc:new Set(),height:o.height||168,hairStyle:o.hairStyle==='bob'?'bob':'short'}));
   if(inst.userData.mixer){ inst.userData.mixer.stopAllAction(); }
   const model=inst.children[0]; inst.remove(model);
+  // patient clothing: scrub top/trousers become a hospital gown, shoes removed (feet are under the blanket)
+  const gownTex=getGown().map.clone(); gownTex.needsUpdate=true; gownTex.repeat.set(9,9);
+  model.traverse(m=>{ if(!m.isMesh) return; const n=((Array.isArray(m.material)?m.material[0]:m.material).name||'').toLowerCase();
+    if(/shoe/.test(n)) m.visible=false;
+    else if(/scrub_top|scrub_pants|gown/.test(n)){ m.material=new THREE.MeshPhysicalMaterial({name:'Gown',map:gownTex,roughness:.92,sheen:.5,sheenRoughness:.8,sheenColor:new THREE.Color('#ffffff')}); } });
   const pt=new THREE.Group(), body=new THREE.Group(); pt.add(body); body.add(model); pt.updateMatrixWorld(true);
   const B=bonesOf(model), need=['hips','spine2','neck','head','leftarm','leftforearm','lefthand','rightarm','rightforearm','righthand','leftupleg','leftleg','leftfoot','rightupleg','rightleg','rightfoot'];
   const miss=need.filter(k=>!B[k]); if(miss.length){ console.warn('patient rig: missing bones',miss); return null; }
@@ -5994,7 +6000,15 @@ function buildPatientRig(gltf,o,t){
   const aim=(bk,tk,dir)=>{ const b=B[bk], cur=wp(B[tk]).sub(wp(b)).normalize(); const q=Q().setFromUnitVectors(cur,dir.clone().normalize());
     const nw=q.multiply(wq(b)); const pq=b.parent.getWorldQuaternion(Q()); b.quaternion.copy(pq.invert().multiply(nw)); pt.updateMatrixWorld(true); };
   for(const S of ['L','R']){ const sx=S==='L'?-1:1;
-    aim(A['arm'+S],A['el'+S],new THREE.Vector3(sx*.16,-1,.03)); aim(A['el'+S],A['hand'+S],new THREE.Vector3(sx*.1,-1,.12));
+    aim(A['arm'+S],A['el'+S],new THREE.Vector3(sx*.18,-1,.12)); aim(A['el'+S],A['hand'+S],new THREE.Vector3(-sx*.24,-.9,.42));   // elbows slightly bent, forearms on the blanket
+    const hk=A['hand'+S], mid=B[hk.replace('hand','handmiddle1')]; if(mid) aim(hk,hk.replace('hand','handmiddle1'),new THREE.Vector3(-sx*.2,-.95,.04));   // wrist relaxed, hand lying flat
+    // relaxed fingers: each segment flexes toward the side the thumb is on (the palm)
+    const th=B[hk.replace('hand','handthumb3')]||B[hk.replace('hand','handthumb2')];
+    for(const f of ['index','middle','ring','pinky']) for(const j of [1,2,3]){ const b=B[hk.replace('hand','hand'+f+j)], nx=B[hk.replace('hand','hand'+f+(j+1))]||(j===3?null:null); if(!b) continue;
+      const kids=b.children.filter(c=>c.isBone); const tip=kids[0]; if(!tip) continue;
+      const d=wp(tip).sub(wp(b)).normalize(), toThumb=th?wp(th).sub(wp(b)):new THREE.Vector3(0,0,-1); const ax=new THREE.Vector3().crossVectors(d,toThumb).normalize(); if(ax.lengthSq()<.5) continue;
+      const ang=(f==='index'?.28:f==='middle'?.36:f==='ring'?.42:.48)*(j===1?.8:1); const q=new THREE.Quaternion().setFromAxisAngle(ax,ang);
+      const nw=q.multiply(wq(b)); const pq=b.parent.getWorldQuaternion(new THREE.Quaternion()); b.quaternion.copy(pq.invert().multiply(nw)); pt.updateMatrixWorld(true); }
     aim(A['leg'+S],A['knee'+S],new THREE.Vector3(sx*.03,-1,0)); aim(A['knee'+S],A['foot'+S],new THREE.Vector3(sx*.02,-1,-.02)); }
   const H=(o.height||168)/100;
   const socks=[];
@@ -6008,14 +6022,45 @@ function buildPatientRig(gltf,o,t){
     const rec={so,b,bind:b.quaternion.clone(),L,Li:L.clone().invert(),base:(base||new THREE.Vector3(1,1,1)).clone(),bindS:b.scale.clone()}; socks.push(rec); return so; };
   const dirOf=(a,bk)=>wp(B[bk]).sub(wp(B[a]));
   const parts={};
-  const hp=wp(B.head).add(new THREE.Vector3(0,.075*H,.012*H));
+  let hp=wp(B.head).add(new THREE.Vector3(0,.075*H,.012*H));
+  { let em=null; model.traverse(m=>{ if(m.isSkinnedMesh&&/^eyes?$/i.test((Array.isArray(m.material)?m.material[0]:m.material).name||'')) em=m; });
+    if(em){ em.updateMatrixWorld(true); const pa=em.geometry.attributes.position, v=new THREE.Vector3(), bx=new THREE.Box3(); for(let i=0;i<pa.count;i++){ v.fromBufferAttribute(pa,i); em.applyBoneTransform(i,v); v.applyMatrix4(em.matrixWorld); pt.worldToLocal(v); bx.expandByPoint(v); }
+      if(!bx.isEmpty()){ const c=bx.getCenter(new THREE.Vector3()); hp=new THREE.Vector3(0,c.y-.008,bx.max.z-.016-.086); PTRIG.faceAnchor=hp.toArray().map(x=>+x.toFixed(3)); } } }
   parts.head=sock('head',null,hp);
   const chest=wp(B.spine2).add(new THREE.Vector3(0,.02*H,0));
   parts.torso=sock('spine2',null,chest,new THREE.Vector3(1.04,1,.64));
   for(const S of ['L','R']){
     parts['arm'+S]=sock(A['arm'+S],dirOf(A['arm'+S],A['el'+S]));
     const el=sock(A['el'+S],dirOf(A['el'+S],A['hand'+S])); parts['arm'+S].userData.el=el;
+    const fk=A['hand'+S].replace('hand','handmiddle1'); const hs=sock(A['hand'+S],B[fk]?dirOf(A['hand'+S],fk):dirOf(A['el'+S],A['hand'+S])); parts['arm'+S].userData.hand=hs;
     parts['leg'+S]=sock(A['leg'+S],dirOf(A['leg'+S],A['knee'+S])); }
+  // eyelids: when the asset has no blink morphs, a skin-coloured lid shell per eyeball (fitted from the Eyes mesh) slides down over the eye
+  const lids=[]; let eyeMesh=null; model.traverse(m=>{ if(m.isMesh&&/^eyes?$/i.test((Array.isArray(m.material)?m.material[0]:m.material).name||'')) eyeMesh=m; });
+  if(eyeMesh){ const pa=eyeMesh.geometry.attributes.position, tmp=new THREE.Vector3(), sides={L:[],R:[]};
+    eyeMesh.updateMatrixWorld(true); for(let i=0;i<pa.count;i++){ tmp.fromBufferAttribute(pa,i); if(eyeMesh.isSkinnedMesh) eyeMesh.applyBoneTransform(i,tmp); tmp.applyMatrix4(eyeMesh.matrixWorld); pt.worldToLocal(tmp); (tmp.x<0?sides.L:sides.R).push(tmp.clone()); }
+    const fit=P=>{ // least-squares sphere: |p|² = 2c·p + k
+      const A=[[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]], bb=[0,0,0,0]; for(const p of P){ const r=[2*p.x,2*p.y,2*p.z,1], f=p.lengthSq(); for(let i=0;i<4;i++){ bb[i]+=r[i]*f; for(let j=0;j<4;j++) A[i][j]+=r[i]*r[j]; } }
+      for(let i=0;i<4;i++){ let mx=i; for(let k=i+1;k<4;k++) if(Math.abs(A[k][i])>Math.abs(A[mx][i])) mx=k; [A[i],A[mx]]=[A[mx],A[i]]; [bb[i],bb[mx]]=[bb[mx],bb[i]];
+        for(let k=i+1;k<4;k++){ const f=A[k][i]/A[i][i]; for(let j=i;j<4;j++) A[k][j]-=f*A[i][j]; bb[k]-=f*bb[i]; } }
+      const x=[0,0,0,0]; for(let i=3;i>=0;i--){ let t=bb[i]; for(let j=i+1;j<4;j++) t-=A[i][j]*x[j]; x[i]=t/A[i][i]; }
+      const c=new THREE.Vector3(x[0],x[1],x[2]); return {c,r:Math.sqrt(x[3]+c.lengthSq())}; };
+    const skinRef=skinMatsOf(model)[0]; const lidMat=new THREE.MeshStandardMaterial({name:'Eyelid',color:skinRef&&skinRef.map?mapMean(skinRef.map).clone().multiply(skinRef.color):new THREE.Color(o.skin||SKIN[1]),roughness:.6});
+    const lashMat=new THREE.MeshBasicMaterial({color:'#2a1d18'});
+    // the shared character rig draws stylised eyeballs on the head; the patient gets anatomically sized ones in the real socket instead
+    B.head.traverse(m=>{ if(m.isMesh&&m.geometry&&m.geometry.type==='SphereGeometry'&&!m.isSkinnedMesh) m.visible=false; });
+    const scl=new THREE.MeshPhysicalMaterial({color:'#EEE9E3',roughness:.18,clearcoat:.6,clearcoatRoughness:.1}), irisM=new THREE.MeshPhysicalMaterial({color:'#3A2417',roughness:.25,clearcoat:.8,clearcoatRoughness:.05}), pupM=new THREE.MeshStandardMaterial({color:'#060606',roughness:.1});
+    for(const S of ['L','R']){ if(sides[S].length<20) continue; const {c,r}=fit(sides[S]); (PTRIG.eyeFit=PTRIG.eyeFit||{})[S]={c:c.toArray().map(v=>+v.toFixed(4)),r:+r.toFixed(4)}; if(!(r>.005&&r<.03)) continue;
+      const R=r+.0011, TH=1.98; // cap from the top of the eyeball to just below the front centre
+      const holder=new THREE.Object3D(); holder.matrixAutoUpdate=false; B.head.add(holder);
+      const hw=B.head.getWorldQuaternion(new THREE.Quaternion()), hs=B.head.getWorldScale(new THREE.Vector3()), sc=1/((hs.x+hs.y+hs.z)/3);
+      holder.matrix.compose(B.head.worldToLocal(pt.localToWorld(c.clone())),hw.invert(),new THREE.Vector3(sc,sc,sc));
+      const ball=new THREE.Mesh(new THREE.SphereGeometry(r*.985,24,18),scl); holder.add(ball);
+      const iris=new THREE.Mesh(new THREE.SphereGeometry(r*.995,24,6,0,Math.PI*2,0,.43),irisM); iris.rotation.x=Math.PI/2; holder.add(iris);
+      const pup=new THREE.Mesh(new THREE.SphereGeometry(r*1.0,16,4,0,Math.PI*2,0,.17),pupM); pup.rotation.x=Math.PI/2; holder.add(pup);
+      const lid=new THREE.Group(); holder.add(lid);
+      const cap=new THREE.Mesh(new THREE.SphereGeometry(R,28,18,0,Math.PI,0,TH),lidMat); lid.add(cap);
+      const lash=new THREE.Mesh(new THREE.TorusGeometry(R*Math.sin(TH),.00055,4,28,Math.PI),lashMat); lash.rotation.x=Math.PI/2; lash.position.y=R*Math.cos(TH); lid.add(lash);
+      lid.rotation.x=-.95; lids.push(lid); } }
   // eyelids: ARKit / generic blink morphs when the asset has them
   const blink=[]; model.traverse(m=>{ const d=m.morphTargetDictionary; if(!d) return; for(const [n,i] of Object.entries(d)) if(/eye.?blink|eyes?.?closed?|blink/i.test(n)) blink.push([m,i]); });
   parts.eyes=[new THREE.Object3D(),new THREE.Object3D()]; parts.mouth=new THREE.Object3D();
@@ -6024,8 +6069,8 @@ function buildPatientRig(gltf,o,t){
   const ref=new THREE.Color(o.skin||SKIN[1]);
   const proxy={color:ref.clone(),roughness:.58,clearcoat:0,clearcoatRoughness:.25};
   const tint0=skinMats.map(m=>m.color.clone());
-  const caps={eyelids:blink.length>0,skin:skinMats.length>0,bones:true,morphs:blink.length};
-  pt.userData={parts,skin:proxy,base:{skin:ref.clone()},rig:{socks,blink,skinMats,tint0,ref,caps,B,neck:B.neck}};
+  const caps={eyeFit:PTRIG.eyeFit||null,eyelids:blink.length>0?'morph':lids.length===2?'shell':false,skin:skinMats.length>0,bones:true,morphs:blink.length,gown:true};
+  pt.userData={parts,skin:proxy,base:{skin:ref.clone()},rig:{socks,blink,skinMats,tint0,ref,caps,B,neck:B.neck,lids,lidMat:lids[0]&&lids[0].children[0].material,lid0:lids[0]&&lids[0].children[0].material.color.clone()}};
   return pt; }
 function syncPatientRig(){ const pt=W3.pt; const R=pt&&pt.userData.rig; if(!R) return;
   const q=new THREE.Quaternion();
@@ -6037,6 +6082,8 @@ function syncPatientRig(){ const pt=W3.pt; const R=pt&&pt.userData.rig; if(!R) r
       if(s.b===R.B.spine2&&R.neck) R.neck.scale.set(1/out.x,1/out.y,1/out.z); } }
   const open=Math.max(0,Math.min(1,(pt.userData.parts.eyes[0].scale.y-.1)/.9));
   for(const [m,i] of R.blink) m.morphTargetInfluences[i]=1-open;
+  if(R.lids) R.lids.forEach(l=>{ l.rotation.x=-.95*open; });
+  if(R.lidMat&&R.lid0){ const c0=pt.userData.skin.color; R.lidMat.color.setRGB(R.lid0.r*c0.r/Math.max(.02,R.ref.r),R.lid0.g*c0.g/Math.max(.02,R.ref.g),R.lid0.b*c0.b/Math.max(.02,R.ref.b)); }
   const c=pt.userData.skin.color;
   R.skinMats.forEach((mt,i)=>{ const t=R.tint0[i]; mt.color.setRGB(t.r*c.r/Math.max(.02,R.ref.r),t.g*c.g/Math.max(.02,R.ref.g),t.b*c.b/Math.max(.02,R.ref.b));
     mt.roughness=pt.userData.skin.roughness; if('clearcoat' in mt){ mt.clearcoat=pt.userData.skin.clearcoat; mt.clearcoatRoughness=pt.userData.skin.clearcoatRoughness; } }); }
@@ -6046,6 +6093,25 @@ onFrame(()=>{ try{ syncPatientRig(); }catch(e){} });
     try{ const cs=C&&C.cs?C.cs:(W3.lobbyPt?(CASES.find(c=>c.id==='A1')||CASES[0]):null);
       if(cs&&W3.pt&&!W3.pt.userData.rig&&patientTpl(cs)&&(!C||['brief','tool'].includes(C.phase))) setupPatient(cs); }catch(e){ console.warn('patient rebuild',e); }
     return r; }; }
+/* devices on the body: electrodes snap to the chest surface, NIBP cuff mid upper arm, SpO₂ probe on a fingertip */
+function snapToBody(obj){ const pt=W3.pt; if(!pt||!pt.userData.rig) return false; const body=pt.children[0];
+  const meshes=[]; body.traverse(m=>{ if(m.isMesh&&m.visible&&(m.isSkinnedMesh)) meshes.push(m); });
+  const wpos=obj.getWorldPosition(new THREE.Vector3()), fwd=new THREE.Vector3(0,0,1).transformDirection(body.matrixWorld);
+  const ray=new THREE.Raycaster(wpos.clone().addScaledVector(fwd,.35),fwd.clone().negate(),0,.7); const hit=ray.intersectObjects(meshes,false)[0]; if(!hit) return false;
+  const n=hit.face?hit.face.normal.clone().transformDirection(hit.object.matrixWorld):fwd; if(n.dot(fwd)<0) n.negate();
+  const lp=body.worldToLocal(hit.point.clone().addScaledVector(n,.0025)); obj.position.copy(lp);
+  const bq=body.getWorldQuaternion(new THREE.Quaternion()).invert(); const nl=n.clone().applyQuaternion(bq);
+  obj.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),nl); return true; }
+{ const _l=PROP.leads; PROP.leads=function(){ const body=W3.pt&&W3.pt.children[0]; const before=body?body.children.length:0; const was=FX.leads; _l.apply(this,arguments); if(was||!body) return;
+    const rig=W3.pt.userData.rig;
+    if(rig){ body.children.slice(before).forEach(d=>{ if(d.geometry&&d.geometry.type==='CylinderGeometry') snapToBody(d); });
+      const cuff=W3.pt.userData.parts.armR.children.find(c=>c.geometry&&c.geometry.type==='CylinderGeometry'&&c.geometry.parameters.openEnded); if(cuff){ cuff.position.y=-.12; cuff.scale.setScalar(.92); } }
+    // SpO₂ probe on the right index/middle fingertip, cable to the monitor
+    const arm=W3.pt.userData.parts.armR, hs=arm.userData.hand, el=arm.userData.el;
+    const pr=new THREE.Group(); const clip=mesh(new RoundedBoxGeometry(.024,.034,.022,2,.006),M('#3a4148',{roughness:.45}),0,0,0,false); pr.add(clip);
+    const glow=mesh(new THREE.SphereGeometry(.004,8,6),new THREE.MeshBasicMaterial({color:'#ff2a2a'}),0,-.006,.012,false); pr.add(glow);
+    if(hs){ pr.position.set(0,-.085,.006); hs.add(pr); } else if(el){ pr.position.set(0,-.31,.01); el.add(pr); }
+    FX.spo2probe=pr; try{ const mon=W3.mon.getWorldPosition(V3()).add(V3(0,1.1,0)); tubeBetween(pr.getWorldPosition(V3()),mon,'#2b2f33',.004,.3); }catch(e){} }; }
 if(window.__ert) window.__ert.ptRig=PTRIG;
 
 /* ---------- larger vital-sign numbers on phones ---------- */
